@@ -147,42 +147,39 @@ python mtk r boot,vbmeta boot.img,vbmeta.img
 python mtk reset
 ```
 
-3. Download patched magisk for mtk:
-Download (here)[https://raw.githubusercontent.com/vvb2060/magisk_files/44ca9ed38c29e22fa276698f6c03bc1168df2c10/app-release.apk]
-
-4. Install on target phone
+3. Install on target phone
 - you need to enable usb-debugging via Settings/About phone/Version, Tap 7x on build number
 - Go to Settings/Additional settings/Developer options, enable "OEM unlock" and "USB Debugging"
-- Install magisk apk
+- Download Magisk from [here](https://github.com/topjohnwu/Magisk/releases/latest) and install the APK
 ```
-adb install app-release.apk
+adb install Magisk-v[version].apk
 ```
 - accept auth rsa request on mobile screen of course to allow adb connection
 
-5. Upload boot to /sdcard/Download
+4. Upload boot to /sdcard/Download
 ```
 adb push boot.img /sdcard/Download
 ```
 
-6. Start magisk, tap on Install, select boot.img from /sdcard/Download, then:
+5. Start magisk, tap on Install, select boot.img from /sdcard/Download, then:
 ```
 adb pull /sdcard/Download/[displayed magisk patched boot filename here]
 mv [displayed magisk patched boot filename here] boot.patched
 ```
 
-7. Do the steps needed in section "Unlock bootloader below"
+6. Do the steps needed in section "Unlock bootloader below"
 
-8. Flash magisk-patched boot and empty vbmeta
+7. Flash magisk-patched boot and empty vbmeta
 ```
 python mtk w boot,vbmeta boot.patched,vbmeta.img.empty
 ```
 
-9. Reboot the phone
+8. Reboot the phone
 ```
 python mtk reset
 ```
 
-10. Disconnect usb cable and enjoy your rooted phone :)
+9. Disconnect usb cable and enjoy your rooted phone :)
 
 
 ### Boot to meta mode via payload
