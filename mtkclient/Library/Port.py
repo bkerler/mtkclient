@@ -90,7 +90,8 @@ class Port(metaclass=LogBase):
                         self.info("Hint:\n\nPower off the phone before connecting.\n" + \
                                   "For brom mode, press and hold vol up, vol dwn, or all hw buttons and " + \
                                   "connect usb.\n" +
-                                  "For preloader mode, don't press any hw button and connect usb.\n")
+                                  "For preloader mode, don't press any hw button and connect usb.\n"
+                                  "If it is already connected and on, hold power for 10 seconds to reset.\n")
                         sys.stdout.write('\n')
                     if loop >= 10:
                         sys.stdout.write('.')
