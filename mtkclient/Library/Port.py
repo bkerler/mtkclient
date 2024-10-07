@@ -125,63 +125,51 @@ class Port(metaclass=LogBase):
                 pass
         return False
 
-    def run_handshake(self):
-        ep_out = self.cdc.EP_OUT.write
-        ep_in = self.cdc.EP_IN.read
-        maxinsize = self.cdc.EP_IN.wMaxPacketSize
-
-        i = 0
-        startcmd = b"\xa0\x0a\x50\x05"
-        length = len(startcmd)
-        # On preloader, send 0xa0 first
-        if self.cdc.pid!=0x3:
-            ep_out(startcmd[0:1])
-        try:
-            while i < length:
-                if ep_out(startcmd[i:i+1]):
-                    if ep_in(maxinsize)[-1] == ~(startcmd[i]) & 0xFF:
-                        i += 1
-                    else:
-                        i = 0
-            self.info("Device detected :)")
-            return True
-        except Exception as serr:
-            self.debug(str(serr))
-            time.sleep(0.005)
-        return False
+ #   def run_handshake(self):
+        
+            
+       
 
     def handshake(self, maxtries=None, loop=0):
         counter = 0
-
         while not self.cdc.connected:
             try:
                 if maxtries is not None and counter == maxtries:
                     break
                 counter += 1
-                if self.cdc.connect() and self.run_handshake():
-                    return True
-                else:
-                    if loop == 5:
-                        sys.stdout.write('\n')
-                        self.info("Hint:\n\nPower off the phone before connecting.\n" +
-                                  "For brom mode, press and hold vol up, vol dwn, or all hw buttons and " +
-                                  "connect usb.\n" +
-                                  "For preloader mode, don't press any hw button and connect usb.\n"
-                                  "If it is already connected and on, hold power for 10 seconds to reset.\n")
-                        sys.stdout.write('\n')
-                    if loop >= 10:
-                        sys.stdout.write('.')
-                    if loop >= 20:
-                        sys.stdout.write('\n')
-                        loop = 0
-                    loop += 1
-                    time.sleep(0.3)
-                    sys.stdout.flush()
+                    self.cdc.connect() 
+                    ep_out = self.cdc.EP_OUT.write
+                    ep_in = self.cdc.EP_IN.read
+                    maxinsize = self.cdc.EP_IN.wMaxPacketSize
+
+                    i = 0
+                    startcmd = b"\xa0\x0a\x50\x05"
+                    length = len(startcmd)
+                    # On preloader, send 0xa0 first
+                    if self.cdc.pid!=0x3:
+                        ep_out(startcmd[0:1])
+                    try:
+                      while i < length:
+                        if ep_out(startcmd[i:i+1]):
+                            if ep_in(maxinsize)[-1] == ~(startcmd[i]) & 0xFF:
+                                i += 1
+                            else:
+                                i = 0
+                            
+                        
+                      self.info("Device detected :)")
+                      return True
+                    
+                    except Exception as serr:
+                     self.debug(str(serr))
+                     time.sleep(0.005)
+                     return False
+                
 
             except Exception as serr:
                 if "access denied" in str(serr):
                     self.warning(str(serr))
-                self.debug(str(serr))
+                # self.debug(str(serr))
                 pass
         return False
 

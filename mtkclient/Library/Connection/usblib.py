@@ -309,7 +309,7 @@ class UsbClass(DeviceClass):
                 break
 
         if self.device is None:
-            self.debug("Couldn't detect the device. Is it connected ?")
+            # self.debug("Couldn't detect the device. Is it connected ?")
             return False
 
         try:
