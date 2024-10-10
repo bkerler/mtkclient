@@ -21,10 +21,6 @@ mkShell {
     shiboken6
     unicorn
     wheel
-
-    # workaround : use qttools in place of pyside6 script
-    # since they are missing https://github.com/NixOS/nixpkgs/issues/277849
-    qt5.qttools
   ];
 
 }
