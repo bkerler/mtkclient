@@ -160,9 +160,6 @@ class Preloader(metaclass=LogBase):
             else:
                 res = self.mtk.port.handshake(maxtries=maxtries)
             if not res:
-                if display:
-                    self.error("Status: Handshake failed, retrying...")
-                    self.config.set_gui_status(self.config.tr("Status: Handshake failed, retrying..."))
                 self.mtk.port.close()
                 tries += 1
         if tries == 1000:
