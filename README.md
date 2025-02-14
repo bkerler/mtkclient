@@ -1,7 +1,7 @@
 # MTKClient
 ![Logo](mtkclient/gui/images/logo_256.png)
 
-Just some mtk tool for exploitation, reading/writing flash and doing crazy stuff. 
+Just some mtk tool for exploitation, reading/writing flash and doing crazy stuff.
 For windows, you need to install the stock mtk port and the usbdk driver (see instructions below).
 For linux, a patched kernel is only needed when using old kamakiri (see Setup folder) (except for read/write flash).
 
@@ -10,7 +10,7 @@ vol up + power or vol down + power and connect the phone. Once detected by the t
 release the buttons.
 
 ## MT6781, MT6789, MT6855, MT6886, MT6895, MT6983, MT8985
-- These chipsets use a new protocol called V6 and the bootrom is patched, thus you need a valid da via --loader option. 
+- These chipsets use a new protocol called V6 and the bootrom is patched, thus you need a valid da via --loader option.
 - On some devices, preloader is deactivated, but you still use it by running "adb reboot edl".
 - This only works with UNFUSED devices currently.
 - For all devices with DAA, SLA and Remote-Auth activated no public solution currently exists (for various reasons).
@@ -42,7 +42,7 @@ sudo apt install python3 git libusb-1.0-0 python3-pip libfuse2
 ```
 #### For ArchLinux
 ```
-(sudo) pacman -S  python python-pip git libusb fuse2
+(sudo) pacman -S  python python-pip python-pipenv git libusb fuse2
 ```
 or
 ```
@@ -54,12 +54,22 @@ yay -S python python-pip git libusb fuse2
 sudo dnf install python3 git libusb1 fuse
 ```
 
-#### Grab files 
+#### Grab files
 ```
 git clone https://github.com/bkerler/mtkclient
 cd mtkclient
 pip3 install -r requirements.txt
 pip3 install .
+```
+
+### Using venv
+```
+python3 -m venv ~/.venv
+git clone https://github.com/bkerler/mtkclient
+cd mtkclient
+. ~/.venv/bin/activate
+pip install -r requirements.txt
+pip install .
 ```
 
 #### Install rules
@@ -87,7 +97,7 @@ brew install macfuse openssl
 
 You may need to **reboot**
 
-#### Grab files 
+#### Grab files
 ```
 git clone https://github.com/bkerler/mtkclient
 cd mtkclient
@@ -131,12 +141,12 @@ pip3 install -r requirements.txt
 ##### Download and Install the Build Tools:
     Go to the Visual Studio Build Tools [download](https://visualstudio.microsoft.com/visual-cpp-build-tools) page.
     Download the installer and run it.
-    
+
 ###### Select the Necessary Workloads:
     In the installer, select the "Desktop development with C++" workload.
     Ensure that the "MSVC v142 - VS 2019 C++ x64/x86 build tools" (or later) component is selected.
     You can also check "Windows 10 SDK" if it’s not already selected.
-    
+
 ###### Complete the Installation:
     Click on the "Install" button to begin the installation.
     Follow the prompts to complete the installation.
@@ -161,7 +171,7 @@ patch -p1 < ../Setup/kernelpatches/disable-usb-checks-5.10.patch
 cp -v /boot/config-$(uname -r) .config
 make menuconfig
 make
-sudo make modules_install 
+sudo make modules_install
 sudo make install
 ```
 
@@ -206,6 +216,31 @@ or
 python mtk.py multi "cmd1;cmd2"
 ```
 See the file "[run.example](https://github.com/bkerler/mtkclient/blob/main/examples/run.example)" on how to structure the script file
+
+### Using in on venv
+Basically, you created a venv folder, so you need to use it to python find the right packages, and don't have any conflicts
+```
+. ~/.venv/bin/activate
+```
+You should see something like this...
+```
+(.venv) [user@hostname]$ 
+```
+This means you are on venv folder!
+
+* Example comands below...
+
+```
+./mtk.py r boot,vbmeta boot.img,vbmeta.img
+./mtk.py payload
+./mtk.py reset
+```
+or simply
+```
+mtk r boot,vbmeta boot.img,vbmeta.img
+mtk payload
+mtk reset
+```
 
 ### Root the phone (Tested with android 9 - 12)
 
@@ -444,9 +479,9 @@ python mtk.py da seccfg [lock or unlock]
 ---------------------------------------------------------------------------------------------------------------
 
 ### Bypass SLA, DAA and SBC (using generic_patcher_payload)
-`` 
+``
 python mtk.py payload
-`` 
+``
 If you want to use SP Flash tool afterwards, make sure you select "UART" in the settings, not "USB".
 
 ### Dump preloader
@@ -497,14 +532,14 @@ python mtk.py payload --payload=payload.bin [--var1=var1] [--wdt=wdt] [--uartadd
 ### Run python mtk.py stage (brom) or mtk plstage (preloader)
 
 #### Run stage2 in bootrom
-`` 
+``
 python mtk.py stage
-`` 
+``
 
 #### Run stage2 in preloader
-`` 
+``
 python mtk.py plstage
-`` 
+``
 
 #### Run stage2 plstage in bootrom
 - Boot in Brom or crash to Brom
@@ -516,44 +551,44 @@ python mtk.py plstage --preloader=preloader.bin
 
 
 ### Leave stage2 and reboot
-`` 
+``
 python stage2.py reboot
-`` 
+``
 
 ### Read rpmb in stage2 mode
-`` 
+``
 python stage2.py rpmb
-`` 
+``
 
 ### Read preloader in stage2 mode
-`` 
+``
 python stage2.py preloader
-`` 
+``
 
 ### Read memory as hex data in stage2 mode
-`` 
+``
 python stage2.py memread [start addr] [length]
-`` 
+``
 
 ### Read memory to file in stage2 mode
-`` 
+``
 python stage2.py memread [start addr] [length] --filename filename.bin
-`` 
+``
 
 ### Write hex data to memory in stage2 mode
-`` 
+``
 python stage2.py memwrite [start addr] --data [data as hexstring]
-`` 
+``
 
 ### Write memory from file in stage2 mode
-`` 
+``
 python stage2.py memwrite [start addr] --filename filename.bin
-`` 
+``
 
 ### Extract keys
-`` 
+``
 python stage2.py keys --mode [sej, dxcc]
-`` 
+``
 For dxcc, you need to use plstage instead of stage
 
 ---------------------------------------------------------------------
