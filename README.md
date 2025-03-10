@@ -1,3 +1,9 @@
+<div align="right">
+  Language:
+  🇺🇸
+  <a title="Chinese" href="./README.zh-CN.md">🇨🇳</a>
+</div>
+
 # MTKClient
 ![Logo](mtkclient/gui/images/logo_256.png)
 
