@@ -857,7 +857,7 @@ class DALegacy(metaclass=LogBase):
         storage = self.get_storage()
         fh = False
         fill = 0
-        if filename is not None:
+        if filename != '':
             fh = open(filename, "rb")
             fsize = os.stat(filename).st_size
             length = min(fsize, length)
