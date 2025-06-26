@@ -1,17 +1,14 @@
-import hashlib
-import hmac
+import json
 import os
-import sys
 from struct import unpack, pack
 
-from mtkclient.config.payloads import PathConfig
-from mtkclient.config.brom_config import Efuse
-from mtkclient.Library.error import ErrorHandler, ErrorCodes_XFlash
 from mtkclient.Library.Hardware.hwcrypto import CryptoSetup, HwCrypto
-from mtkclient.Library.utils import LogBase, Progress, logsetup, find_binary
 from mtkclient.Library.Hardware.seccfg import SecCfgV3, SecCfgV4
+from mtkclient.Library.error import ErrorHandler, ErrorCodes_XFlash
+from mtkclient.Library.utils import LogBase, Progress, logsetup, find_binary
 from mtkclient.Library.utils import MTKTee
-import json
+from mtkclient.config.brom_config import Efuse
+from mtkclient.config.payloads import PathConfig
 
 
 class XCmd:

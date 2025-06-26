@@ -2,27 +2,25 @@
 # -*- coding: utf-8 -*-
 # (c) B.Kerler 2018-2024 GPLv3 License
 import logging
-import time
 import os
-import sys
+import time
 from binascii import hexlify
+from queue import Queue
 from struct import pack, unpack
+from threading import Thread
 
-from Cryptodome.Util.number import bytes_to_long, long_to_bytes
+from Cryptodome.Util.number import long_to_bytes
 
 from mtkclient.Library.Auth.sla import generate_da_sla_signature
+from mtkclient.Library.DA.daconfig import EmmcPartitionType, UFSPartitionType, DaStorage, DAconfig
+from mtkclient.Library.DA.xflash.extension.xflash import XFlashExt, XCmd
 from mtkclient.Library.DA.xflash.xflash_flash_param import NandExtension
 from mtkclient.Library.DA.xflash.xflash_param import Cmd, ChecksumAlgorithm, FtSystemOSE, DataType
-from mtkclient.Library.utils import LogBase, logsetup
 from mtkclient.Library.error import ErrorHandler
-from mtkclient.Library.DA.daconfig import EmmcPartitionType, UFSPartitionType, DaStorage, DAconfig
 from mtkclient.Library.partition import Partition
-from mtkclient.config.payloads import PathConfig
-from mtkclient.Library.DA.xflash.extension.xflash import XFlashExt, XCmd
-from mtkclient.Library.settings import HwParam
 from mtkclient.Library.thread_handling import writedata
-from queue import Queue
-from threading import Thread
+from mtkclient.Library.utils import LogBase, logsetup
+from mtkclient.config.payloads import PathConfig
 
 rq = Queue()
 

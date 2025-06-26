@@ -2,10 +2,9 @@
 # -*- coding: utf-8 -*-
 # (c) B.Kerler 2018-2024 GPLv3 License
 
+from Cryptodome.Cipher import PKCS1_OAEP
 from Cryptodome.Hash import SHA256
 from Cryptodome.Util.number import bytes_to_long, ceil_div, size, long_to_bytes
-from Cryptodome.Cipher import PKCS1_OAEP
-from Cryptodome.PublicKey import RSA
 
 
 def customized_sign(n, e, msg):

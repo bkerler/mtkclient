@@ -96,19 +96,19 @@ class EntryRegion:
 
 
 class DA:
-    v6=False
-    loader=None
-    magic=0
-    hw_code=0
-    hw_sub_code=0
-    hw_version=0
-    sw_version=0
-    pagesize=512
-    entry_region_index=1
-    entry_region_count=0
+    v6 = False
+    loader = None
+    magic = 0
+    hw_code = 0
+    hw_sub_code = 0
+    hw_version = 0
+    sw_version = 0
+    pagesize = 512
+    entry_region_index = 1
+    entry_region_count = 0
     region = []
 
-    def __init__(self, data, old_ldr:bool=False, v6:bool=False):
+    def __init__(self, data, old_ldr: bool = False, v6: bool = False):
         self.loader = None
         self.v6 = v6
         sh = Structhelper(data)
@@ -128,9 +128,6 @@ class DA:
             entry_tmp = EntryRegion(sh.bytes(20))
             self.region.append(entry_tmp)
         self.old_ldr = old_ldr
-
-    def setfilename(self, loaderfilename: str):
-        self.loader = loaderfilename
 
     def __repr__(self):
         info = f"HWCode:{hex(self.hw_code)},HWSubCode:{hex(self.hw_sub_code)}," + \
@@ -238,16 +235,17 @@ class DAconfig(metaclass=LogBase):
                 count_da = unpack("<I", bootldr.read(4))[0]
                 v6 = b"MTK_DA_v6" in hdr
                 old_ldr = False
-                bootldr.seek(0x6C+0xD8)
+                bootldr.seek(0x6C + 0xD8)
                 if bootldr.read(2) == b"\xDA\xDA":
-                    offset=0xD8
+                    offset = 0xD8
                     old_ldr = True
                 else:
-                    offset=0xDC
+                    offset = 0xDC
                 for i in range(0, count_da):
                     bootldr.seek(0x6C + (i * offset))
-                    da = DA(bootldr.read(offset),old_ldr, v6)
-                    da.setfilename(loader)
+                    da = DA(bootldr.read(offset), old_ldr, v6)
+                    da.loader = loader
+                    #da.setfilename(loader)
                     # if da.hw_code == 0x8127 and "5.1824" not in loader:
                     #    continue
                     if da.hw_code not in dasetup:

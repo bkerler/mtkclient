@@ -1,18 +1,16 @@
-import hashlib
-import logging
+import json
 import os
 import sys
 from struct import unpack, pack
 
+from mtkclient.Library.Hardware.hwcrypto import CryptoSetup, HwCrypto
+from mtkclient.Library.Hardware.seccfg import SecCfgV3, SecCfgV4
+from mtkclient.Library.error import ErrorHandler
+from mtkclient.Library.utils import LogBase, Progress, logsetup, find_binary
+from mtkclient.Library.utils import MTKTee
+from mtkclient.config.brom_config import Efuse
 # from keystone import *
 from mtkclient.config.payloads import PathConfig
-from mtkclient.config.brom_config import Efuse
-from mtkclient.Library.error import ErrorHandler
-from mtkclient.Library.Hardware.hwcrypto import CryptoSetup, HwCrypto
-from mtkclient.Library.utils import LogBase, Progress, logsetup, find_binary
-from mtkclient.Library.Hardware.seccfg import SecCfgV3, SecCfgV4
-from mtkclient.Library.utils import MTKTee
-import json
 
 rpmb_error = [
     "",

@@ -47,7 +47,7 @@ def crc_word(data, chs=0):
 class DALegacy(metaclass=LogBase):
 
     def __init__(self, mtk, daconfig, loglevel=logging.INFO):
-        self.__logger, self.info, self.debug, self.warning, self.error = logsetup(self, self.__logger, 
+        self.__logger, self.info, self.debug, self.warning, self.error = logsetup(self, self.__logger,
                                                                                   loglevel, mtk.config.gui)
         self.Cmd = Cmd()
         self.Rsp = Rsp()
@@ -291,9 +291,9 @@ class DALegacy(metaclass=LogBase):
         errorcode = int.from_bytes(buffer, 'big')
         if errorcode == 0x0:
             if hwcode == 0x6592:
-                tmp1=self.usbread(4)
-                tmp2=self.usbread(4)
-                tmp3=self.usbread(4)
+                tmp1 = self.usbread(4)
+                tmp2 = self.usbread(4)
+                tmp3 = self.usbread(4)
                 tmp4 = self.usbread(4)
                 tmp5 = self.usbread(4)
             return True
@@ -528,7 +528,7 @@ class DALegacy(metaclass=LogBase):
         self.sdc = SdcInfo(self.config, self.usbread(0x1C))
         self.flashconfig = ConfigInfo(self.usbread(0x26))
         if self.config.hwcode == 0x8163:
-            status=self.usbread(4)
+            status = self.usbread(4)
         pi = PassInfo(self.usbread(0xA))
         if pi.ack == 0x5A:
             return True
@@ -796,7 +796,7 @@ class DALegacy(metaclass=LogBase):
                 buffer = self.usbread(1)
                 if buffer != self.Rsp.ACK:
                     self.error(
-                        f"Error on sending brom stage {stage} addr {hex(address+pos)}: " +
+                        f"Error on sending brom stage {stage} addr {hex(address + pos)}: " +
                         f"{hexlify(buffer).decode('utf-8')}")
                     self.config.set_gui_status(self.config.tr("Error on sending brom stage"))
                     break
@@ -899,17 +899,13 @@ class DALegacy(metaclass=LogBase):
         return True
 
     def get_storage(self):
-        if self.daconfig.flashtype == "nor":
-            storage = DaStorage.MTK_DA_STORAGE_NOR
-        elif self.daconfig.flashtype == "nand":
-            storage = DaStorage.MTK_DA_STORAGE_NAND
-        elif self.daconfig.flashtype == "ufs":
-            storage = DaStorage.MTK_DA_STORAGE_UFS
-        elif self.daconfig.flashtype == "sdc":
-            storage = DaStorage.MTK_DA_STORAGE_SDMMC
-        else:
-            storage = DaStorage.MTK_DA_STORAGE_EMMC
-        return storage
+        storage_types = {
+            "nor": DaStorage.MTK_DA_STORAGE_NOR,
+            "nand": DaStorage.MTK_DA_STORAGE_NAND,
+            "ufs": DaStorage.MTK_DA_STORAGE_UFS,
+            "sdc": DaStorage.MTK_DA_STORAGE_SDMMC
+        }
+        return storage_types.get(self.daconfig.flashtype, DaStorage.MTK_DA_STORAGE_EMMC)
 
     def sdmmc_write_image(self, addr, length, filename, display=True):
         if filename != "":
@@ -1135,7 +1131,7 @@ class DALegacy(metaclass=LogBase):
                 if bytestoread > packetsize:
                     size = packetsize
                 buffer.extend(self.usbread(size, w_max_packet_size=size))
-                bytestoread = len(buffer)-length
+                bytestoread = len(buffer) - length
                 checksum = unpack(">H", self.usbread(2))[0]
                 self.debug("Checksum: %04X" % checksum)
                 self.usbwrite(self.Rsp.ACK)

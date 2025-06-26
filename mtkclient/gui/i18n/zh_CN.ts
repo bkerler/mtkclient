@@ -204,7 +204,7 @@
     <message>
         <location filename="../main_gui.ui" line="1203"/>
         <source>Ready.</source>
-        <translation>准备。</translation>
+        <translation>就绪。</translation>
     </message>
     <message>
         <location filename="../main_gui.ui" line="1218"/>

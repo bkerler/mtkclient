@@ -1,18 +1,17 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 # (c) B.Kerler 2018-2024 GPLv3 License
-import os
 import logging
+import os
 import time
+from binascii import hexlify
 from enum import Enum
 from struct import unpack, pack
-from binascii import hexlify
 
-from Cryptodome.Util.number import size
 from mtkclient.Library.Auth.sla import generate_brom_sla_challenge
+from mtkclient.Library.error import ErrorHandler
 from mtkclient.Library.settings import HwParam
 from mtkclient.Library.utils import LogBase, logsetup
-from mtkclient.Library.error import ErrorHandler
 from mtkclient.config.brom_config import DAmodes
 
 USBDL_BIT_EN = 0x00000001  # 1: download bit enabled

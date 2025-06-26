@@ -4,42 +4,12 @@
 import argparse
 from mtkclient.Library.mtk_main import Main, metamodes
 
-info = "MTK Flash/Exploit Client Public V2.0.1 (c) B.Kerler 2018-2024"
+info = "MTK Flash/Exploit Client Public V2.0.1 (c) B.Kerler 2018-2025"
+# The cmds should be set, not dict.
+cmds = ['printgpt', 'gpt', 'r', 'rl', 'rf', 'rs', 'ro', 'fs', 'w', 'wf', 'wl', 'wo', 'e', 'es', 'ess', 'footer', 'reset',
+     'dumpbrom', 'dumpsram', 'dumppreloader', 'payload', 'crash', 'brute', 'gettargetconfig', 'logs', 'meta', 'peek',
+     'stage', 'plstage', 'da', 'script', 'multi']
 
-cmds = {
-    "printgpt": "Print GPT Table information",
-    "gpt": "Save gpt table to given directory",
-    "r": "Read flash to filename",
-    "rl": "Read all partitions from flash to a directory",
-    "rf": "Read whole flash to file",
-    "rs": "Read sectors starting at start_sector to filename",
-    "ro": "Read flash starting at offset to filename",
-    "fs": "Mount the device as a FUSE filesystem",
-    "w": "Write partition from filename",
-    "wf": "Write flash from filename",
-    "wl": "Write partitions from directory path to flash",
-    "wo": "Write flash starting at offset from filename",
-    "e": "Erase partition",
-    "es": "Erase partition with sector count",
-    "ess": "Erase sector with sector count",
-    "footer": "Read crypto footer from flash",
-    "reset": "Send mtk reset command",
-    "dumpbrom": "Try to dump the bootrom",
-    "dumpsram": "Try to dump the sram",
-    "dumppreloader": "Try to dump the preloader",
-    "payload": "Run a specific kamakiri / da payload, if no filename is given, generic patcher is used",
-    "crash": "Try to crash the preloader",
-    "brute": "Bruteforce the kamakiri var1",
-    "gettargetconfig": "Get target config (sbc, daa, etc.)",
-    "logs": "Get target logs",
-    "meta": "Set meta mode",
-    "peek": "Read memory in patched preloader mode",
-    "stage": "Run stage2 payload via boot rom mode (kamakiri)",
-    "plstage": "Run stage2 payload via preloader mode (send_da)",
-    "da": "Run da xflash/legacy special commands",
-    "script": "Run multiple commands using text script",
-    "multi": 'Run multiple commands using a semicolon-separated list (enclose list in quotes)'
-}
 
 
 def main():

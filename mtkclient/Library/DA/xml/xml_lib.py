@@ -3,26 +3,23 @@
 # (c) B.Kerler 2018-2024 GPLv3 License
 import logging
 import os
-from struct import pack, unpack
 from queue import Queue
+from struct import pack, unpack
 from threading import Thread
 
 from Cryptodome.Util.number import long_to_bytes
-from Cryptodome.Cipher import PKCS1_OAEP
-from Cryptodome.Hash import SHA256
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Util.number import size, bytes_to_long
-from mtkclient.Library.DA.xml.xml_param import DataType, FtSystemOSE, LogLevel
-from mtkclient.Library.utils import logsetup, LogBase
-from mtkclient.Library.error import ErrorHandler
-from mtkclient.Library.DA.daconfig import EmmcPartitionType, UFSPartitionType, DaStorage
-from mtkclient.Library.partition import Partition
-from mtkclient.config.payloads import PathConfig
-from mtkclient.Library.thread_handling import writedata
-from mtkclient.Library.DA.xml.xml_cmd import XMLCmd, BootModes
-from mtkclient.Library.DA.xml.extension.v6 import XmlFlashExt
-from mtkclient.Library.Auth.sla import generate_da_sla_signature
+from Cryptodome.Util.number import size
 
+from mtkclient.Library.Auth.sla import generate_da_sla_signature
+from mtkclient.Library.DA.daconfig import EmmcPartitionType, UFSPartitionType, DaStorage
+from mtkclient.Library.DA.xml.extension.v6 import XmlFlashExt
+from mtkclient.Library.DA.xml.xml_cmd import XMLCmd, BootModes
+from mtkclient.Library.DA.xml.xml_param import DataType, FtSystemOSE, LogLevel
+from mtkclient.Library.error import ErrorHandler
+from mtkclient.Library.partition import Partition
+from mtkclient.Library.thread_handling import writedata
+from mtkclient.Library.utils import logsetup, LogBase
+from mtkclient.config.payloads import PathConfig
 
 rq = Queue()
 

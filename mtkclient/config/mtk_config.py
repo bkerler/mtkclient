@@ -1,9 +1,8 @@
-import os
-import sys
 import logging
+import os
 from binascii import hexlify
+
 from mtkclient.Library.utils import LogBase
-from mtkclient.Library.settings import HwParam
 from mtkclient.config.brom_config import Chipconfig, DAmodes, hwconfig
 
 try:

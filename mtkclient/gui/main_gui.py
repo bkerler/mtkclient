@@ -385,13 +385,13 @@ class Ui_MainWindow(object):
         self.gridLayout_2 = QGridLayout(self.keytab)
         self.gridLayout_2.setObjectName(u"gridLayout_2")
         self.keytable = QTableWidget(self.keytab)
-        if (self.keytable.columnCount() < 2):
+        if self.keytable.columnCount() < 2:
             self.keytable.setColumnCount(2)
         __qtablewidgetitem = QTableWidgetItem()
         self.keytable.setHorizontalHeaderItem(0, __qtablewidgetitem)
         __qtablewidgetitem1 = QTableWidgetItem()
         self.keytable.setHorizontalHeaderItem(1, __qtablewidgetitem1)
-        if (self.keytable.rowCount() < 7):
+        if self.keytable.rowCount() < 7:
             self.keytable.setRowCount(7)
         __qtablewidgetitem2 = QTableWidgetItem()
         self.keytable.setVerticalHeaderItem(0, __qtablewidgetitem2)

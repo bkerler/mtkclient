@@ -1,16 +1,16 @@
-import json
-import os
-import time
-import sys
 import logging
-from struct import pack, unpack
+import os
+import sys
+import time
 from binascii import hexlify
-from mtkclient.Library.utils import LogBase, logsetup, getint
-from mtkclient.config.payloads import PathConfig
+from struct import pack, unpack
+
+from mtkclient.Library.Filesystem.mtkdafs import MtkDaFS
 from mtkclient.Library.error import ErrorHandler
+from mtkclient.Library.utils import LogBase, logsetup, getint
 from mtkclient.Library.utils import Progress
 from mtkclient.config.brom_config import Efuse, DAmodes
-from mtkclient.Library.Filesystem.mtkdafs import MtkDaFS
+from mtkclient.config.payloads import PathConfig
 
 try:
     from fuse import FUSE
