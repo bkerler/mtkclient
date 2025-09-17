@@ -601,9 +601,18 @@ class DAXML(metaclass=LogBase):
             da2offset = self.daconfig.da_loader.region[2].m_start_addr
             if not self.mtk.daloader.patch and not self.mtk.config.stock:
                 if self.carbonara is not None and self.mtk.config.target_config["sbc"]:
-                    loaded = self.boot_to(da2offset, da2)
-                    if loaded:
-                        self.patch = True
+                    with open(self.daconfig.loader, 'rb') as bootldr:
+                        da1offset = self.daconfig.da_loader.region[1].m_buf
+                        bootldr.seek(da1offset)
+                        da1size = self.daconfig.da_loader.region[1].m_len
+                        bootldr.seek(da1offset)
+                        da1 = bootldr.read(da1size)
+                    
+                    if self.carbonara.is_vulnerable(da1):
+                        da2 = self.carbonara.run_carbonara(da1, da2, self)
+                        loaded = self.boot_to(da2offset, da2)
+                        if loaded:
+                            self.patch = True
                 else:
                     loaded = self.boot_to(da2offset, da2)
                     if not loaded:
