@@ -1224,7 +1224,18 @@ class DAXFlash(metaclass=LogBase):
                 self.info("Uploading stage 2...")
                 stage = stage + 1
                 loaded = False
+
                 if not self.mtk.daloader.patch and not self.mtk.config.stock and connagent == b"preloader":
+                    if self.carbonara is not None:
+                        with open(self.daconfig.loader, 'rb') as bootldr:
+                            da1offset = self.daconfig.da_loader.region[1].m_buf
+                            da1size = self.daconfig.da_loader.region[1].m_len
+                            bootldr.seek(da1offset)
+                            da1 = bootldr.read(da1size)
+
+                        if self.carbonara.is_vulnerable(da1):
+                             self.daconfig.da2 = self.carbonara.run_carbonara(da1, self.daconfig.da2, self)
+                    
                     loaded = self.boot_to(self.daconfig.da_loader.region[stage].m_start_addr, self.daconfig.da2)
                 if not loaded:
                     loaded = self.boot_to(self.daconfig.da_loader.region[stage].m_start_addr, self.daconfig.da2)
