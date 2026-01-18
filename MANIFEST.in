@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include mtkclient/Loader/*.bin
+include mtkclient/Loader/Preloader/*.bin
+include mtkclient/payloads/*.bin
+include mtkclient/Windows/*.dll
+include mtkclient/gui/images/*.png
+

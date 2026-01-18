@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 255
+exclude = .git,__pycache__,doc/,docs/,build/,dist/,archive/
+#per-file-ignores =
+#  __init__.py:F401
+

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mtkclient"
+description = "Mediatek reverse engineering and flashing tools"
+maintainers = [
+    {name = "Bjoern Kerler", email = "info@revskills.de"}
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+version = "2.1.2"
+requires-python = ">= 3.8"
+dependencies = [
+    "pyusb",
+    "pycryptodome",
+    "pycryptodomex",
+    "colorama",
+    "shiboken6", 
+    "pyside6",
+    "pyserial",
+    "fusepy"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Operating System :: OS Independent",
+]
+keywords = ["mediatek", "mtk", "flashing", "reverse engineering", "firmware"]
+
+[project.urls]
+Repository = "https://github.com/bkerler/mtkclient.git"
+Issues = "https://github.com/bkerler/mtkclient/issues"
+
+[project.scripts]
+mtk = "mtkclient.mtk:main"
+stage2 = "mtkclient.stage2:main"
+da_parser = "mtkclient.Tools.da_parser:main"
+brom_to_offs = "mtkclient.Tools.brom_to_offs:main"
+
+[project.gui-scripts]
+mtk_gui = "mtkclient.mtk_gui:main"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "mtkclient/Loader/*.bin",
+    "mtkclient/Loader/Preloader/*.bin",
+    "mtkclient/payloads/*.bin",
+    "mtkclient/Windows/*.dll",
+    "mtkclient/gui/images/*.png",
+    "Tools/*.py"
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"Tools/brom_to_offs.py" = "mtkclient/Tools/brom_to_offs.py"
+"Tools/da_parser.py" = "mtkclient/Tools/da_parser.py"
+"mtk.py" = "mtkclient/mtk.py"
+"mtk_gui.py" = "mtkclient/mtk_gui.py"
+"stage2.py" = "mtkclient/stage2.py"
+"LICENSE" = "LICENSE"
+"README.md" = "README.md"

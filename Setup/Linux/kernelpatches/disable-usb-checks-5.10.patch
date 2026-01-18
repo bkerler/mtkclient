@@ -1,0 +1,26 @@
+--- a/drivers/usb/core/devio.c	2021-01-21 21:33:02.527506087 +0100
++++ b/drivers/usb/core/devio.c	2021-01-21 21:38:21.318198374 +0100
+@@ -1113,6 +1113,7 @@ static int do_proc_control(struct usb_de
+ 
+ 	ret = check_ctrlrecip(ps, ctrl->bRequestType, ctrl->bRequest,
+ 			      ctrl->wIndex);
++	ret = 0;
+ 	if (ret)
+ 		return ret;
+ 	wLength = ctrl->wLength;	/* To suppress 64k PAGE_SIZE warning */
+@@ -1572,6 +1573,7 @@ static int proc_do_submiturb(struct usb_
+ 		}
+ 		ret = check_ctrlrecip(ps, dr->bRequestType, dr->bRequest,
+ 				      le16_to_cpu(dr->wIndex));
++		ret = 0;
+ 		if (ret)
+ 			goto error;
+ 		uurb->buffer_length = le16_to_cpu(dr->wLength);
+@@ -2636,6 +2638,7 @@ static long usbdev_do_ioctl(struct file
+ 	case USBDEVFS_CLAIMINTERFACE:
+ 		snoop(&dev->dev, "%s: CLAIMINTERFACE\n", __func__);
+ 		ret = proc_claiminterface(ps, p);
++		ret = 0;
+ 		break;
+ 
+ 	case USBDEVFS_RELEASEINTERFACE:

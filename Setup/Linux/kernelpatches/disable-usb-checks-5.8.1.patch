@@ -1,0 +1,27 @@
+diff -ur /home/xyz/Downloads/linux-4.14.83/drivers/usb/core/devio.c ./drivers/usb/core/devio.c
+--- /home/xyz/Downloads/linux-4.14.83/drivers/usb/core/devio.c	2018-11-23 02:19:27.000000000 -0500
++++ ./drivers/usb/core/devio.c	2019-09-15 13:15:53.973022982 -0400
+@@ -1090,6 +1090,7 @@
+ 		return -EFAULT;
+ 	ret = check_ctrlrecip(ps, ctrl.bRequestType, ctrl.bRequest,
+ 			      ctrl.wIndex);
++	ret = 0;
+ 	if (ret)
+ 		return ret;
+ 	wLength = ctrl.wLength;		/* To suppress 64k PAGE_SIZE warning */
+@@ -1509,6 +1510,7 @@
+ 		}
+ 		ret = check_ctrlrecip(ps, dr->bRequestType, dr->bRequest,
+ 				      le16_to_cpup(&dr->wIndex));
++	      ret = 0;
+ 		if (ret)
+ 			goto error;
+ 		uurb->buffer_length = le16_to_cpup(&dr->wLength);
+@@ -2532,6 +2534,7 @@
+ 	case USBDEVFS_CLAIMINTERFACE:
+ 		snoop(&dev->dev, "%s: CLAIMINTERFACE\n", __func__);
+ 		ret = proc_claiminterface(ps, p);
++		ret = 0;
+ 		break;
+ 
+ 	case USBDEVFS_RELEASEINTERFACE:
