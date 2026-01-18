@@ -29,7 +29,9 @@ On some devices, preloader is deactivated, but you can reactivate it by running 
 - All contributors
 
 ### Installation
+
 [See linux/macos installation hints](README-INSTALL.md)
+
 [See windows installation hints](README-WINDOWS.md)
 
 ### Usage
