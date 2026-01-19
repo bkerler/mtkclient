@@ -223,11 +223,16 @@ def main():
     cmd_peek.add_argument('length', help='Bytes to read from memory')
     cmd_peek.add_argument("--filename", help="Save to file (optional)")
 
-    subparsers.add_parser("stage", help=CMDS_HELP["stage"], parents=[base]).add_argument(
-        'verifystage2', help='Verify if stage2 data has been written correctly')
+    stage=subparsers.add_parser("stage", help=CMDS_HELP["stage"], parents=[base])
+    stage.add_argument('--verifystage2', help='Verify if stage2 data has been written correctly')
+    stage.add_argument('--stage2', help='Set stage2 filename')
+    stage.add_argument('--stage2addr', help='Set stage2 loading address')
+    stage.add_argument('--filename', help='Set stage1 loader filename')
 
-    subparsers.add_parser("plstage", help=CMDS_HELP["plstage"], parents=[base]).add_argument(
-        'startpartition', help='Option for plstage - Boot to (lk, tee1)')
+    plstage=subparsers.add_parser("plstage", help=CMDS_HELP["plstage"], parents=[base])
+    plstage.add_argument('--startpartition', help='Option for plstage - Boot to (lk, tee1)')
+    plstage.add_argument('--pl', help='pl stage filename (optional)')
+
 
     # DA subcommands
     p_da = subparsers.add_parser("da", help=CMDS_HELP["da"], parents=[base])
