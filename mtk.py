@@ -210,8 +210,9 @@ def main():
     subparsers.add_parser("dumpsram", help=CMDS_HELP["dumpsram"], parents=[base])
     subparsers.add_parser("dumppreloader", help=CMDS_HELP["dumppreloader"], parents=[base])
 
-    subparsers.add_parser("payload", help=CMDS_HELP["payload"], parents=[base])\
-        .add_argument("--payload", type=str, help="Payload file (optional)")
+    parser_payload = subparsers.add_parser("payload", help=CMDS_HELP["payload"], parents=[base])
+    parser_payload.add_argument("--payload", type=str, help="Payload file (optional)")
+    parser_payload.add_argument("--metamode", type=str, default=None, help=f"metamode to use [{metamodes}]")
 
     subparsers.add_parser("crash", help=CMDS_HELP["crash"], parents=[base])
     subparsers.add_parser("brute", help=CMDS_HELP["brute"], parents=[base])
