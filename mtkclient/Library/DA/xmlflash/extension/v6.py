@@ -53,7 +53,7 @@ class XmlFlashExt(metaclass=LogBase):
         self.da2 = None
         self.da2address = None
 
-    def patch_command(self, _da2):
+    def patch_custom_command(self, _da2):
         self.da2address = self.xflash.daconfig.da_loader.region[2].m_start_addr  # at_address
         data = bytearray(_da2)
         idx = data.find(b"\x00CMD:SET-HOST-INFO\x00")
@@ -161,10 +161,14 @@ class XmlFlashExt(metaclass=LogBase):
                 instr1 = int.from_bytes(self.da2[idx - 0x8:idx - 0x4], 'little')
                 instr2 = int.from_bytes(self.da2[idx - 0x4:idx], 'little')
                 g_ufs_hba = op_mov_to_offset(instr1, instr2, 4)
-                ufshcd_queuecommand = find_binary(self.da2,
-                                                  b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\x08\xD0\x4D\xE2\x48\x40\x90\xE5")
+                ufshcd_queuecommand = find_binary(self.da2,b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\x08\xD0\x4D\xE2\x48\x40\x90\xE5")
                 if ufshcd_queuecommand is None:
-                    ufshcd_queuecommand = 0
+                    ufshcd_queuecommand = find_binary(self.da2,
+                                                      b"\xF0\x4F\x2D\xE9\x1C\xB0\x8D\xE2\x0C\xD0\x4D\xE2\x48\xA0\x90\xE5\x00\x80\xA0\xE1")
+                    if ufshcd_queuecommand is None:
+                        ufshcd_queuecommand = 0
+                    else:
+                        ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
                 else:
                     ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
 
@@ -185,7 +189,9 @@ class XmlFlashExt(metaclass=LogBase):
 
             mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x23\xDE\x4D\xE2")
             if mmc_set_part_config is None:
-                mmc_set_part_config = 0
+                mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x8E\xDF\x4D\xE2")
+                if mmc_set_part_config is None:
+                    mmc_set_part_config = 0
 
             mmc_rpmb_send_command = find_binary(self.da2, b"\xF0\x48\x2D\xE9\x10\xB0\x8D\xE2\x08\x70\x9B\xE5")
             if mmc_rpmb_send_command is None:
@@ -241,9 +247,20 @@ class XmlFlashExt(metaclass=LogBase):
                 da2patched[idx:idx + 0x18] = (
                     b"\x20\x00\x80\x52\xC0\x03\x5F\xD6\x20\x00\x80\x52\xC0\x03\x5F\xD6\x20\x00\x80\x52\xC0\x03\x5F\xD6")
                 patched = True
+        if not patched:
+            # TCL 50 5G
+            idx = find_binary(_da2,b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1")
+            if idx is not None:
+                da2patched[idx:idx + 0x18] = (
+                    b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1")
+                patched = True
+
         if patched:
             self.info("Patched read_register / write_register")
-        da2patched = self.patch_command(_da2)
+            patch_custom = self.patch_custom_command(_da2)
+            if patch_custom is not None:
+                self.info("Patched CUSTOM command")
+                da2patched = patch_custom
 
         idx = find_binary(da2patched,
                           b"\x00\xA0\xE3\x1E\xFF\x2F\xE1.\x00\xA0\xE3\x1E\xFF\x2F\xE1." +
@@ -283,10 +300,14 @@ class XmlFlashExt(metaclass=LogBase):
             da2patched[idx:idx + len(patch)] = patch
             self.info("Patched generic Partition sgpt verification.")
 
-        idx2 = find_binary(da2patched, b"\x30\x48\x2D\xE9\x08\xB0\x8D\xE2\x20\xD0\x4D\xE2\x01\x50\xA0\xE1")
-        if idx2 is not None:
-            da2patched[idx2:idx2 + 8] = b"\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1"
-            self.info("Patched Infinix Remote SLA authentification.")
+        idx3 = find_binary(da2patched, b"\x32\x00\x00\xE3\x02\x00\x4C\xE3")
+        if idx3 is not None:
+            da2patched[idx3:idx3 + 12] = b"\x00\x00\xA0\xE3\x00\x00\xA0\xE3\x00\x40\xA0\xE3"
+            self.info("Patched SLA signature check 1")
+            idx4 = find_binary(da2patched, b"\x32\x40\x00\xE3\x02\x40\x4C\xE3")
+            if idx4 is not None:
+                da2patched[idx4:idx4 + 8] = b"\x00\x40\xA0\xE3\x00\x40\xA0\xE3"
+                self.info("Patched SLA signature check 2")
         else:
             idx2 = find_binary(da2patched, b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\xF0\xD0\x4D\xE2\x01\x50\xA0\xE1")
             if idx2 is not None:

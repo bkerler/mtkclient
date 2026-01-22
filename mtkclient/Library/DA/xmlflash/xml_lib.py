@@ -619,9 +619,9 @@ class DAXML(metaclass=LogBase):
                 res = self.check_sla()
                 if isinstance(res, bool):
                     if not res:
-                        self.info("SLA is disabled")
+                        self.info("DA XML SLA is disabled")
                     else:
-                        self.info("SLA is enabled")
+                        self.info("DA XML SLA is enabled")
                         rsakey = None
                         from mtkclient.Library.Auth.sla_keys import da_sla_keys, SlaKey
                         for key in da_sla_keys:
@@ -637,7 +637,9 @@ class DAXML(metaclass=LogBase):
                                 if self.handle_sla(data=sla_signature):
                                     print("SLA Signature was accepted.")
                                     self.get_hw_info()
-                                    # return True
+                                else:
+                                    print("SLA Key wasn't accepted.")
+                                    return False
                             else:
                                 sla_signature = b"\x00" * 0x100
                                 if self.handle_sla(data=sla_signature):
@@ -650,6 +652,16 @@ class DAXML(metaclass=LogBase):
                                     if not self.handle_sla(data=sla_signature):
                                         print("SLA Key wasn't accepted.")
                                         return False
+                                    else:
+                                        print("SLA Signature was accepted.")
+                        else:
+                            self.dev_info = self.get_dev_info()
+                            sla_signature = generate_da_sla_signature(data=self.dev_info["rnd"], key=rsakey.key)
+                            if not self.handle_sla(data=sla_signature):
+                                print("SLA Key wasn't accepted.")
+                                return False
+                            else:
+                                print("SLA Signature was accepted.")
             self.reinit(True)
             self.check_lifecycle()
             if self.mtk.daloader.patch:

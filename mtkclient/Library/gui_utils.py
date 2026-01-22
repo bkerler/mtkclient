@@ -91,58 +91,55 @@ class progress:
 
     def update(self, length: int):
         self.pos += length
-        if self.pos != 0.0:
+        if self.pos != 0:
             prog = float(self.pos) / float(self.total) * 100.0
         else:
             prog = 0.0
-
-        if not self.start:
-            curtime = time.time()
-            self.start = curtime
-            self.progtime = curtime
-            self.prog = prog
-            self.oldpos = 0
-            self.print_progress(prog, 100, prefix='Done',
-                                suffix=self.prefix + ' (0x%X/0x%X),%0.2f MB/s' % (self.pos // self.pagesize,
-                                                                                  self.total // self.pagesize,
-                                                                                  0), bar_length=10)
-            if self.guiprogress is not None:
-                self.guiprogress(self.pos)
-        if prog > self.prog:
-            if self.display:
-                t0 = time.time()
-                self.progtime = t0
-                throughput = self.pos - self.oldpos
-                self.oldpos = self.pos
-                difftime = self.progtime - self.oldtime
-                if difftime > 0:
-                    throughput /= difftime
-                self.oldtime = self.progtime
-                telapsed, lefttime, finishtime = self.calcProcessTime(self.start, prog, 100)
-                hinfo = ""
-                if lefttime > 0:
-                    sec = lefttime
-                    if sec > 60:
-                        min = sec // 60
-                        sec = sec % 60
-                        if min > 60:
-                            h = min // 24
-                            min = min % 24
-                            hinfo = "%02dh:%02dm:%02ds left" % (h, min, sec)
-                        else:
-                            hinfo = "%02dm:%02ds left" % (min, sec)
-                    else:
-                        hinfo = "%02ds left" % sec
-
-                self.print_progress(prog, 100, prefix='Progress:',
-                                    suffix=self.prefix + f' (0x%X/0x%X), %s/s {hinfo} ' % (
-                                        self.pos // self.pagesize,
-                                        self.total // self.pagesize,
-                                        self.convert_size(throughput)), bar_length=10)
+        if self.guiprogress is not None:
+            self.guiprogress(self.pos)
+        else:
+            if not self.start:
+                curtime = time.time()
+                self.start = curtime
+                self.progtime = curtime
                 self.prog = prog
-                if self.guiprogress is not None:
-                    self.guiprogress(self.pos)
+                self.oldpos = 0
+                self.print_progress(prog, 100, prefix='Done',
+                                    suffix=self.prefix + ' (0x%X/0x%X),%0.2f MB/s' % (self.pos // self.pagesize,
+                                                                                      self.total // self.pagesize,
+                                                                                      0), bar_length=10)
+            if prog > self.prog:
+                if self.display:
+                    t0 = time.time()
+                    self.progtime = t0
+                    throughput = self.pos - self.oldpos
+                    self.oldpos = self.pos
+                    difftime = self.progtime - self.oldtime
+                    if difftime > 0:
+                        throughput /= difftime
+                    self.oldtime = self.progtime
+                    telapsed, lefttime, finishtime = self.calcProcessTime(self.start, prog, 100)
+                    hinfo = ""
+                    if lefttime > 0:
+                        sec = lefttime
+                        if sec > 60:
+                            min = sec // 60
+                            sec = sec % 60
+                            if min > 60:
+                                h = min // 24
+                                min = min % 24
+                                hinfo = "%02dh:%02dm:%02ds left" % (h, min, sec)
+                            else:
+                                hinfo = "%02dm:%02ds left" % (min, sec)
+                        else:
+                            hinfo = "%02ds left" % sec
 
+                    self.print_progress(prog, 100, prefix='Progress:',
+                                        suffix=self.prefix + f' (0x%X/0x%X), %s/s {hinfo} ' % (
+                                            self.pos // self.pagesize,
+                                            self.total // self.pagesize,
+                                            self.convert_size(throughput)), bar_length=10)
+                    self.prog = prog
 
 class ColorFormatter(logging.Formatter):
     LOG_COLORS = {

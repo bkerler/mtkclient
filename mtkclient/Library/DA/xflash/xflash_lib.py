@@ -174,6 +174,9 @@ class DAXFlash(metaclass=LogBase):
             return True
         if status != 0xc0040050:
             self.error(f"Error on sending parameter: {self.eh.status(status)}")
+            if status == 0xc0020053:
+                # Anti roll back DA error
+                sys.exit(1)
         return False
 
     def send_devctrl(self, cmd, param=None, status=None):

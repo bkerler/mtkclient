@@ -4,6 +4,7 @@
 
 import argparse
 import logging
+import os
 import sys
 
 from mtkclient.Library.mtk_main import Main, metamodes
@@ -326,6 +327,9 @@ def main():
         level=logging.DEBUG if args.debugmode else logging.INFO,
         format="%(levelname)s: %(message)s"
     )
+    if args.debugmode:
+        if not os.path.exists("logs"):
+            os.makedirs("logs")
 
     mtk = Main(args)
     return mtk.run(parser)

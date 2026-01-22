@@ -106,8 +106,10 @@ class SecCfgV4(metaclass=LogBase):
                             self.hwtype = "V2"
                         else:
                             return False
+            if self.hwtype is None:
+                self.info(f"hwtype not supported: {self.hwtype}")
+                return False
             self.info(f"hwtype found: {self.hwtype}")
-
         """
         LKS_DEFAULT = 0x01
         LKS_MP_DEFAULT = 0x02
