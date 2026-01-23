@@ -171,6 +171,8 @@ def main():
     # Full flash image
     for cmd in ["rf", "wf"]:
         cmd_parsers[cmd].add_argument("filename", help="Flash image file")
+        cmd_parsers[cmd].add_argument("--offset", help="Byte offset")
+        cmd_parsers[cmd].add_argument("--length", help="Length")
         cmd_parsers[cmd].add_argument('--disable_internal_flash',
                                       help='Disable internal flash read for iot MT6261/2301',
                                       action="store_true",

@@ -261,63 +261,74 @@ class Preloader(metaclass=LogBase):
             else:
                 self.error(f"Couldn't find cert file {self.config.cert}")
         if self.config.iot:
-            if self.config.hwcode == 0x6261 and self.config.swver == 0x35C0 and self.config.hw_sub_code == 0x8000:
-                self.info("MTK 6261MA detected :)")
-                sys.stdout.flush()
-                self.write16(0xa0030000, 0x2200)  # disable system wdg
-                self.write16(0xa0700a28, 0x8000)  # enter USB download
-                self.write16(0xa0700a24, 2)  # disable battery wdg
-                self.write32(0xA0510000,
-                             self.read32(0xA0510000) | 2)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
-            elif self.config.hwcode == 0x6261 and self.config.hw_sub_code == 0x8000:
-                if self.config.swver == 0x3600:
-                    self.info("MTK 2503 detected :)")
-                elif self.config.swver == 0x7640:
-                    self.info("MTK 2503DV detected :)")
-                sys.stdout.flush()
-                # SetReg_DisableChargeControl
-                self.write16(0xA0700A28, self.read16(0xa0700a28 | 0x4000))
-                self.write16(0xA0700A00, self.read16(0xA0700A00) | 0x10)
-                # disable system wdg
-                self.write16(0xA0030000, 0x2200)
-                # SetLSRSTB
-                self.write32(0xA0020318, 0x00002000)
-                self.write32(0xA0020014, 0x00002000)
-                self.write32(0xA0020C58, 0x00700000)
-                # SetupRTC32K
-                self.write16(0xA071004C, 0x1A57)
-                self.write16(0xA071004C, 0x2B68)
-                self.write16(0xA071004C, 0x042E)
+            if self.config.hwcode == 0x6261:
+                RTC_BASE = 0xA0710000
+                PMU_BASE = 0xA0700000
+                EMI_REMAP = 0xA0510000
+                RGU_BASE = 0xA0030000
+                GPIO_BASE = 0xA0020000
+                MR_BOOTCODE = 0  # Boot jump code
+                MR_FB0RB1 = 2  # Flash - Bank0, RAM - Bank1
+                MR_FB1RB0 = 3  # Flash - Bank1, RAM - Bank0
+                if self.config.swver == 0x35C0 and self.config.hw_sub_code == 0x8000:
+                    self.info("MTK 6261MA detected :)")
+                    sys.stdout.flush()
+                    self.write16(RGU_BASE, 0x2200)  # disable system wdg
+                    self.write16(PMU_BASE + 0xa28, 0x8000)  # enter USB download
+                    self.write16(PMU_BASE + 0xa24, 2)  # disable battery wdg
+                    self.write32(EMI_REMAP,
+                                 self.read32(
+                                     EMI_REMAP) | MR_FB0RB1)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
+                elif self.config.hw_sub_code == 0x8000:
+                    if self.config.swver == 0x3600:
+                        self.info("MTK 2503 detected :)")
+                    elif self.config.swver == 0x7640:
+                        self.info("MTK 2503DV detected :)")
+                    sys.stdout.flush()
+                    # SetReg_DisableChargeControl
+                    self.write16(PMU_BASE + 0xA28, self.read16(0xa0700a28 | 0x4000))
+                    self.write16(PMU_BASE + 0xA00, self.read16(0xA0700A00) | 0x10)
+                    # disable system wdg
+                    self.write16(RGU_BASE, 0x2200)
+                    # SetLSRSTB
+                    self.write32(GPIO_BASE + 0x318, 0x00002000)
+                    self.write32(GPIO_BASE + 0x14, 0x00002000)
+                    self.write32(GPIO_BASE + 0xC58, 0x00700000)
+                    # SetupRTC32K
+                    self.write16(RTC_BASE + 0x4C, 0x1A57)
+                    self.write16(RTC_BASE + 0x4C, 0x2B68)
+                    self.write16(RTC_BASE + 0x4C, 0x042E)
 
-                # PowerKeysMatched
-                self.write16(0xA0710010, 0x0000)
-                self.write16(0xA0710008, 0x0000)
-                self.write16(0xA071000C, 0x0000)
-                self.write16(0xA0710074, 0x0001)
+                    # PowerKeysMatched
+                    self.write16(RTC_BASE + 0x10, 0x0000)
+                    self.write16(RTC_BASE + 0x8, 0x0000)
+                    self.write16(RTC_BASE + 0xC, 0x0000)
+                    self.write16(RTC_BASE + 0x74, 0x0001)
 
-                # PowerKeysMatched
-                self.write16(0xA0710050, 0xA357)
-                self.write16(0xA0710054, 0x67D2)
-                self.write16(0xA0710074, 0x0001)
+                    # PowerKeysMatched
+                    self.write16(RTC_BASE + 0x50, 0xA357)
+                    self.write16(RTC_BASE + 0x54, 0x67D2)
+                    self.write16(RTC_BASE + 0x74, 0x0001)
 
-                # RTC_V4::Unlock
-                self.write16(0xA0710068, 0x586A)
-                self.write16(0xA0710074, 0x0001)
-                self.write16(0xA0710068, 0x9136)
-                self.write16(0xA0710074, 0x0001)
-                self.write16(0xA0710000, 0x430E)
-                self.write16(0xA0710074, 0x0001)
-                # Unlock end
-                """
-                self.write32(0xA0510000, self.read32(0xA0510000) | 2) # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
+                    # RTC_V4::Unlock
+                    self.write16(RTC_BASE + 0x68, 0x586A)
+                    self.write16(RTC_BASE + 0x74, 0x0001)
+                    self.write16(RTC_BASE + 0x68, 0x9136)
+                    self.write16(RTC_BASE + 0x74, 0x0001)
+                    self.write16(RTC_BASE, 0x430E)
+                    self.write16(RTC_BASE + 0x74, 0x0001)
+                    # Unlock end
+                    """
+                    self.write32(0xA0510000, self.read32(0xA0510000) | 2) # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
 
-                # SetLongPressPWKEY
-                self.write16(0xA0700F00, 0x0041)
-                self.write16(0xA0700F00, 0x0051)
-                self.write16(0xA0700F00, 0x0041)
-                """
-                self.write32(0xA0510000,
-                             self.read32(0xA0510000) | 2)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
+                    # SetLongPressPWKEY
+                    self.write16(0xA0700F00, 0x0041)
+                    self.write16(0xA0700F00, 0x0051)
+                    self.write16(0xA0700F00, 0x0041)
+                    """
+                    self.write32(EMI_REMAP,
+                                 self.read32(
+                                     EMI_REMAP) | MR_FB0RB1)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
 
             if self.config.internal_flash:
                 self.dump_internal_flash()
