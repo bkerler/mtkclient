@@ -438,7 +438,10 @@ class DaHandler(metaclass=LogBase):
                 elif parttype == "user":
                     length = self.mtk.daloader.daconfig.storage.flashsize
                 else:
-                    length = self.mtk.daloader.daconfig.storage.ufs.lu3_size
+                    if self.mtk.daloader.daconfig.storage.flashsize > self.mtk.daloader.daconfig.storage.ufs.lu3_size:
+                        length = self.mtk.daloader.daconfig.storage.flashsize
+                    else:
+                        length = self.mtk.daloader.daconfig.storage.ufs.lu3_size
             else:
                 length = self.mtk.daloader.daconfig.storage.flashsize
             if self.mtk.config.hwcode in [0x2625, 0x2523, 0x7682, 0x7686, 0x5932]:

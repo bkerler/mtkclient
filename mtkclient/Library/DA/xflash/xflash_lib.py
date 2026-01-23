@@ -744,10 +744,8 @@ class DAXFlash(metaclass=LogBase):
                             rq.put(bytes(chunk_buffer))
                         else:
                             buffer.extend(chunk_buffer)
-                        stmp = pack("<III", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4)
-                        data = pack("<I", 0)
+                        stmp = pack("<IIII", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4, 0)
                         self.usbwrite(stmp)
-                        self.usbwrite(data)
                         ld = len(chunk_buffer)
                         bytestoread -= ld
                         bytesread += ld

@@ -6,7 +6,7 @@ def writedata(filename, rq: Queue):
     try:
         with open(filename, "wb", buffering=8*1024*1024) as wf:  # 8MB buffer
             while True:
-                block = rq.get(timeout=30)
+                block = rq.get(timeout=300)
                 if block is None:
                     break
                 try:
