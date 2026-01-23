@@ -14,7 +14,6 @@ def writedata(filename, rq: Queue):
                 except Exception as e:
                     print(f"Write error: {e}")
                     break
-                rq.task_done()
     except Exception as e:
         print(f"Writer thread exception: {e}")
     finally:
