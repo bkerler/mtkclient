@@ -4,6 +4,7 @@
 import logging
 import time
 import os
+import sys
 from binascii import hexlify
 from struct import pack, unpack
 from queue import Queue
