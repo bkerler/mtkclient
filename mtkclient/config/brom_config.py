@@ -300,6 +300,28 @@ class Efuse:
                 base + 0x81C, base + 0x820, base + 0x824, base + 0x828, base + 0x82C,
                 base + 0xCB8, base + 0xD74
             ]
+        elif hwcode in [0x1471]:
+            self.efuses = [
+                base + 0x20, base + 0x30, base + 0x38, base + 0x1000, base + 0x1004,
+                base + 0x1008, base + 0x100C, base + 0x1010, base + 0x1014, base + 0x1018,
+                0xA, 0xF00008, base + 0x140, base + 0x144, base + 0x148,
+                base + 0x14C, base + 0x4000, base + 0x4004, base + 0x4008, base + 0x400C,
+                0xF00000, base + 0x4010, base + 0x4014, base + 0x4018, base + 0x401C,
+                base + 0x4020, base + 0x4024, base + 0x4028, base + 0x402C, 0x1D,
+                0x1E, base + 0x60, base + 0x130, base + 0xA000, 0xF00000,
+                base + 0x7500, base + 0x7504, base + 0x7508, base + 0xA51C, base + 0xA520,
+                base + 0x5034, base + 0x5038, base + 0x503C, base + 0x5040, base + 0x5044,
+                base + 0x5048, base + 0x504C, base + 0x5050, base + 0x5054, base + 0x5058,
+                base + 0x505C, base + 0x5060, base + 0x5000, base + 0x5064, base + 0x5068,
+                base + 0x64, base + 0x90, base + 0x94, base + 0x98, base + 0x9C,
+                base + 0xA0, base + 0xA4, base + 0xA8, base + 0xAC, base + 0xB0,
+                base + 0xBC, base + 0xC0, base + 0xC4, base + 0xC8, base + 0xCC,
+                base + 0xD0, base + 0xD4, base + 0xD8, base + 0xDC, base + 0xE0,
+                base + 0xE4, base + 0xE8, base + 0xEC, base + 0xF0, base + 0xF4,
+                base + 0xF8, base + 0xFC, base + 0x100, base + 0x104, base + 0x108,
+                base + 0x10C, base + 0x110, base + 0x114, base + 0x118, base + 0x11C,
+                0xF00000, 0xF00000, 0xF00000
+            ]
         else:
             self.efuses = []
 
@@ -1811,6 +1833,35 @@ hwconfig = {
         name="MT6878",
         description="Dimensity 7300"
         # loader="mt6878_payload.bin"
+    ),
+    0x1471: Chipconfig(
+        var1=0xA,
+        watchdog=0x1c010000,
+        uart=0x16010000,
+        brom_payload_addr=0x100A00,
+        da_payload_addr=0x201000,
+        pl_payload_addr=0x40200000,
+        # gcpu_base=0x10050000,
+        dxcc_base=0x18005000,
+        sej_base=0x1800E000,
+        # cqdma_base=0x10212000,
+        # ap_dma_mem=0x11300800 + 0x1a0,
+        # blacklist=[(0x102d5c, 0x0)],
+        # blacklist_count=0x0000000A,
+        # send_ptr=(0x102888, 0xE79C),
+        # ctrl_buffer=0x00103024,
+        # cmd_handler=0x000101E8,
+        # brom_register_access=(0xf99a, 0xfa0c),
+        meid_addr=0x1008EC,
+        socid_addr=0x100934,
+        # prov_addr=0x1066C0,
+        efuse_addr=0x10160000,
+        damode=DAmodes.XML,
+        dacode=0x1471,
+        has64bit=True,
+        name="MT6993",
+        description="Dimensity 9500"
+        # loader="mt6985_payload.bin"
     ),
     0x8127: Chipconfig(
         var1=0xA,
