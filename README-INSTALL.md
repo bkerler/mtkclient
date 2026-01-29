@@ -74,6 +74,7 @@ yay -S python python-pip git libusb fuse2
 #### For Fedora
 ```shell
 sudo dnf install python3 git libusb1 fuse
+sudo groupadd plugdev
 ```
 
 ### Using venv
