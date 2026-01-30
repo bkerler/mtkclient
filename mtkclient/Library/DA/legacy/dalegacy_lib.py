@@ -1074,7 +1074,7 @@ class DALegacy(metaclass=LogBase):
                                      wdata=wdata, display=display)
 
     def formatflash(self, addr, length, parttype=None, display=True):
-        length, parttype = self.get_parttype(length, parttype)
+        length, parttype = self.daconfig.legacy_storage.partitiontype_and_size(parttype=parttype, length=length)
         self.check_usb_cmd()
         if self.daconfig.storage.flashtype == "emmc":
             self.sdmmc_switch_part(parttype)
