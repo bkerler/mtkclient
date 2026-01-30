@@ -20,6 +20,8 @@ yay -S python python-pip git libusb fuse2
 #### Fedora
 ```
 sudo dnf install python3 git libusb1 fuse-libs
+sudo cp Setup/Linux/52-mtk.rules /etc/udev/rules.d/52-mtk.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 #### 获取文件

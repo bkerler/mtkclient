@@ -15,6 +15,7 @@ from mtkclient.Library.DA.legacy.dalegacy_iot_flash_param import (NorInfoIoT, Na
 
 from mtkclient.Library.DA.legacy.dalegacy_param import PortValues, Rsp, Cmd
 from mtkclient.Library.DA.legacy.extension.legacy import LegacyExt
+from mtkclient.Library.DA.storage import DaStorage
 from mtkclient.Library.gui_utils import LogBase, logsetup, structhelper_io, progress
 from mtkclient.Library.error import ErrorHandler
 from mtkclient.Library.partition import Partition
@@ -977,7 +978,16 @@ class DALegacy(metaclass=LogBase):
     def sdmmc_write_data(self, addr: int, length: int, filename: str, offset=0, parttype=None, wdata=None,
                          display=True):
         length, parttype = self.daconfig.legacy_storage.partitiontype_and_size(parttype=parttype, length=length)
-        storage = self.daconfig.storage.get_storage()
+        if self.daconfig.storage.flashtype == "sdc":
+            storage = DaStorage.MTK_DA_STORAGE_SDMMC
+        elif self.daconfig.storage.flashtype == "ufs":
+            storage = DaStorage.MTK_DA_STORAGE_UFS
+        elif self.daconfig.storage.flashtype == "nor":
+            storage = DaStorage.MTK_DA_STORAGE_NOR
+        elif self.daconfig.storage.flashtype == "nand":
+            storage = DaStorage.MTK_DA_STORAGE_NAND
+        else:
+            storage = DaStorage.MTK_DA_STORAGE_EMMC
         fh = False
         fill = 0
         if filename != '':

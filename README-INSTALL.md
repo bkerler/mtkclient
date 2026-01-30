@@ -74,7 +74,8 @@ yay -S python python-pip git libusb fuse2
 #### For Fedora
 ```shell
 sudo dnf install python3 git libusb1 fuse-libs
-sudo groupadd plugdev
+sudo cp Setup/Linux/52-mtk.rules /etc/udev/rules.d/52-mtk.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 ### Using venv
