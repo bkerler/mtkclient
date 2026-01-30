@@ -73,7 +73,7 @@ yay -S python python-pip git libusb fuse2
 
 #### For Fedora
 ```shell
-sudo dnf install python3 git libusb1 fuse
+sudo dnf install python3 git libusb1 fuse-libs
 sudo groupadd plugdev
 ```
 

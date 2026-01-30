@@ -19,7 +19,7 @@ yay -S python python-pip git libusb fuse2
 
 #### Fedora
 ```
-sudo dnf install python3 git libusb1 fuse
+sudo dnf install python3 git libusb1 fuse-libs
 ```
 
 #### 获取文件
