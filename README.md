@@ -34,6 +34,8 @@ On some devices, preloader is deactivated, but you can reactivate it by running 
 
 [See windows installation hints](README-WINDOWS.md)
 
+[See automated Windows installer](https://github.com/codefl0w/mtkclient-windows-installer)
+
 ### Usage
 [See usage instructions](README-USAGE.md)
 
