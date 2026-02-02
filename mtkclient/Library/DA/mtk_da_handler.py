@@ -648,6 +648,13 @@ class DaHandler(metaclass=LogBase):
                     self.error(f"Error: Couldn't detect partition: {partition}\nAvailable partitions:")
                     for rpartition in res[1]:
                         self.info(rpartition.name)
+        elif parttype in ["boot1","boot2"]:
+            if self.mtk.daloader.formatflash(addr=0,
+                                             length=0x40000,
+                                             partitionname=parttype, parttype=parttype):
+                print(
+                    f"Formatted {parttype}.")
+                count_fp += 1
         if count_fp == len(partitions) and count_fp > 1:
             print("All partitions formatted.")
         elif count_fp != len(partitions) and count_fp > 1:
