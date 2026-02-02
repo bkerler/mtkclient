@@ -338,8 +338,8 @@ class DALegacy(metaclass=LogBase):
                         self.usbwrite(pack(">I", self.daconfig.emiver))
                     ret = self.usbread(1)
                     if ret == self.Rsp.NACK:
-                        self.error("EMI Config not accepted :(")
-                        return False
+                        self.error("EMI Config not accepted :( Make sure to provide a valid preloader.")
+                        sys.exit()
                     if ret == self.Rsp.ACK:
                         self.info(f"Sending dram info ... EMI-Version {hex(self.daconfig.emiver)}")
                         if self.daconfig.emiver in [0xF, 0x10, 0x11, 0x14, 0x15]:

@@ -154,18 +154,21 @@ class DaHandler(metaclass=LogBase):
                 mtk.daloader.patch = False
                 hassecurity = (self.mtk.config.target_config["sla"] or self.mtk.config.target_config["daa"] or
                                self.mtk.config.target_config["sbc"])
+                bypassedsecurity = False
                 if not hassecurity:
                     mtk.daloader.patch = True
-
-                if not self.mtk.config.stock:
-                    mtk = mtk.bypass_security()  # Needed for dumping preloader
+                    self.info("Unprotected device, we assume we can patch directly !")
                 else:
-                    self.info("Using supplied preloader. Skipping exploitation!")
+                    if not self.mtk.config.stock:
+                        mtk = mtk.bypass_security()  # Needed for dumping preloader
+                        bypassedsecurity = True
+                    else:
+                        self.info("Using supplied preloader. Skipping exploitation!")
 
                 if mtk is not None:
                     self.mtk = mtk
                     if mtk.config.preloader is None:
-                        if self.mtk.config.chipconfig.damode != 6 and self.mtk.config.is_brom:
+                        if self.mtk.config.chipconfig.damode != 6 and self.mtk.config.is_brom and bypassedsecurity:
                             self.warning(
                                 "Device is in BROM mode. No preloader given, trying to dump preloader from ram.")
                             preloader = self.dump_preloader_ram(
@@ -188,7 +191,8 @@ class DaHandler(metaclass=LogBase):
                 mtk.daloader.patch = False
 
         if not mtk.daloader.upload_da(preloader=mtk.config.preloader):
-            return None
+            self.error("Failed to upload da.")
+            sys.exit(1)
         else:
             mtk.daloader.writestate()
             return mtk
