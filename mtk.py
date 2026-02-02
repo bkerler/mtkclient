@@ -245,6 +245,7 @@ def main():
     da_peek = da_subs.add_parser("peek", parents=[base])
     da_peek.add_argument('address', type=str, help="Address to read from (hex value)")
     da_peek.add_argument('length', type=str, help="Length to read")
+    da_peek.add_argument('--filename', type=str, help="Save to file (optional)")
 
     da_subs.add_parser("efuse", parents=[base], help="Read efuses")
     da_subs.add_parser("generatekeys", parents=[base], help="Generate keys")
