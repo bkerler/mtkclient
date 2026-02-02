@@ -3,6 +3,7 @@
 # (c) B.Kerler 2018-2025 GPLv3 License
 import os
 import logging
+import sys
 from binascii import hexlify
 from mtkclient.Library.Exploit.amonet import Amonet
 from mtkclient.Library.Exploit.hashimoto import Hashimoto
@@ -102,11 +103,13 @@ class PLTools(metaclass=LogBase):
                     self.info("Bootrom dumped as: out.bin")
                     return True
             self.error(f"Error on sending payload: {filename}")
-            return False
+            sys.exit(1)
         else:
             self.error(f"Error on sending payload: {filename}")
-            self.error(f"Error, payload answered instead: {hexlify(response_ack).decode('utf-8')}")
-            return False
+            if response_ack is not None:
+                self.error(f"Error, payload answered instead: {hexlify(response_ack).decode('utf-8')}")
+            sys.exit(1)
+
 
     def runbrute(self, args):
         if self.exploit.bruteforce(args, 0x9900):
