@@ -482,7 +482,7 @@ class Main(metaclass=LogBase):
                 if rmtk.port.cdc.vid != 0xE8D or rmtk.port.cdc.pid != 0x0003:
                     self.warning("We couldn't enter preloader.")
                 plt = PLTools(rmtk, self.__logger.level)
-                data, filename = plt.run_dump_preloader(self.args.ptype)
+                data, filename = plt.run_dump_preloader(self.args.ptype, self.args.filename)
                 if filename is None:
                     filename = "preloader.bin"
                 if data is not None:
