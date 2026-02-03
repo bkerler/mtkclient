@@ -231,7 +231,6 @@ def main():
     cmd_peek = subparsers.add_parser("peek", help=CMDS_HELP["peek"], parents=[base])
     cmd_peek.add_argument('address', help='Address to read from memory')
     cmd_peek.add_argument('length', help='Bytes to read from memory')
-    #cmd_peek.add_argument("--filename", help="Save to file (optional)")
 
     stage = subparsers.add_parser("stage", help=CMDS_HELP["stage"], parents=[base])
     stage.add_argument('--verifystage2', help='Verify if stage2 data has been written correctly')
