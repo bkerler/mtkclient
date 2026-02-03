@@ -102,6 +102,11 @@ def add_gpt_group(parser):
     g.add_argument('--parttype', help='Partition type (user/boot1/rpmb/lu0 etc.)')
     g.add_argument('--skip', help='Skip partitions (comma separated names)')
 
+def add_specific_group(parser):
+    g = parser.add_argument_group("Specific argument")
+    g.add_argument('--filename', type=str, help='Optional filename')
+
+
 
 # ================== Base Parser ==================
 
@@ -115,6 +120,7 @@ def create_base_parser():
     add_debug_group(parser)
     add_exploit_group(parser)
     add_gpt_group(parser)
+    add_specific_group(parser)
     return parser
 
 
@@ -222,18 +228,17 @@ def main():
     subparsers.add_parser("gettargetconfig", help=CMDS_HELP["gettargetconfig"], parents=[base])
     subparsers.add_parser("logs", help=CMDS_HELP["logs"], parents=[base])
 
-    cmd_peek=subparsers.add_parser("peek", help=CMDS_HELP["peek"], parents=[base])
+    cmd_peek = subparsers.add_parser("peek", help=CMDS_HELP["peek"], parents=[base])
     cmd_peek.add_argument('address', help='Address to read from memory')
     cmd_peek.add_argument('length', help='Bytes to read from memory')
-    cmd_peek.add_argument("--filename", help="Save to file (optional)")
+    #cmd_peek.add_argument("--filename", help="Save to file (optional)")
 
-    stage=subparsers.add_parser("stage", help=CMDS_HELP["stage"], parents=[base])
+    stage = subparsers.add_parser("stage", help=CMDS_HELP["stage"], parents=[base])
     stage.add_argument('--verifystage2', help='Verify if stage2 data has been written correctly')
     stage.add_argument('--stage2', help='Set stage2 filename')
     stage.add_argument('--stage2addr', help='Set stage2 loading address')
-    stage.add_argument('--filename', help='Set stage1 loader filename')
 
-    plstage=subparsers.add_parser("plstage", help=CMDS_HELP["plstage"], parents=[base])
+    plstage = subparsers.add_parser("plstage", help=CMDS_HELP["plstage"], parents=[base])
     plstage.add_argument('--startpartition', help='Option for plstage - Boot to (lk, tee1)')
     plstage.add_argument('--pl', help='pl stage filename (optional)')
 
@@ -245,7 +250,7 @@ def main():
     da_peek = da_subs.add_parser("peek", parents=[base])
     da_peek.add_argument('address', type=str, help="Address to read from (hex value)")
     da_peek.add_argument('length', type=str, help="Length to read")
-    da_peek.add_argument('--filename', type=str, help="Save to file (optional)")
+
 
     da_subs.add_parser("efuse", parents=[base], help="Read efuses")
     da_subs.add_parser("generatekeys", parents=[base], help="Generate keys")
