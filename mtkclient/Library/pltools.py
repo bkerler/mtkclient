@@ -158,19 +158,21 @@ class PLTools(metaclass=LogBase):
                 self.error(f"Error on sending payload: {pfilename}")
         return False
 
-    def run_dump_preloader(self, filename):
+    def run_dump_preloader(self, ptype, filename):
         pfilename = os.path.join(self.pathconfig.get_payloads_path(), "generic_preloader_dump_payload.bin")
         if type(self.exploit) is Kamakiri or type(self.exploit) is Kamakiri2:
             self.info("Kamakiri / DA Run")
             if self.runpayload(filename=pfilename, ack=0xC1C2C3C4, offset=0):
-                data, filename = self.exploit.dump_preloader()
+                data, filename_tools = self.exploit.dump_preloader()
+                if filename is None:
+                    return data, filename_tools
                 return data, filename
             else:
                 self.error(f"Error on sending payload: {pfilename}")
                 return None, None
         else:
-            if self.exploit.dump_brom(filename):
-                self.info(f"Preloader dumped as: {filename}")
+            if self.exploit.dump_brom(ptype):
+                self.info(f"Preloader dumped as: {ptype}")
                 return True
             else:
                 self.error("Error on dumping preloader")
