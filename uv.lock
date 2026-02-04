@@ -23,7 +23,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/04/0b/4506cb2e831cea4b0
 
 [[package]]
 name = "mtkclient"
-version = "2.1.2"
+version = "2.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "colorama" },

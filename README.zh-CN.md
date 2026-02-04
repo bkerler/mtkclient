@@ -22,6 +22,7 @@
 ## 致谢
 - kamakiri [xyzz]
 - linecode exploit [chimera]
+- hakujoudai exploit [chimera], creds to [R0rt1z2],[Shomy]
 - Chaosmaster
 - Geert-Jan Kreileman (GUI 设计及优化)
 - 所有贡献者

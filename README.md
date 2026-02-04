@@ -24,6 +24,7 @@ On some devices, preloader is deactivated, but you can reactivate it by running 
 ## Credits
 - kamakiri [xyzz]
 - linecode exploit [chimera]
+- hakujoudai exploit [chimera], creds to [R0rt1z2],[Shomy]
 - Chaosmaster
 - Geert-Jan Kreileman (GUI, design & fixes)
 - All contributors

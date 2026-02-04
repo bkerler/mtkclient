@@ -9,7 +9,7 @@ import sys
 
 from mtkclient.Library.mtk_main import Main, metamodes
 
-INFO = "MTK Flash/Exploit Client V2.1.2 (c) B.Kerler 2018-2026"
+INFO = "MTK Flash/Exploit Client V2.1.3 (c) B.Kerler 2018-2026"
 
 CMDS_HELP = {
     "printgpt": "Print GPT Table information",

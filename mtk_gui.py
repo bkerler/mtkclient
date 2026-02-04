@@ -659,7 +659,7 @@ def main():
     addTopMargin = 20
     if sys.platform.startswith('darwin'):  # MacOS has the toolbar in the top bar insted of in the app...
         addTopMargin = 0
-    win.setWindowTitle("MTKClient - Version 2.1.2")
+    win.setWindowTitle("MTKClient - Version 2.1.3")
     # lay = QVBoxLayout(self)
 
     win.show()
