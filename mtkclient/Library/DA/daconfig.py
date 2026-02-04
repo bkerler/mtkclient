@@ -217,6 +217,7 @@ class DAconfig(metaclass=LogBase):
                             self.loader = loader.loader
         if self.da_loader is None and dacode != 0x6261:
             self.error("No da_loader config set up")
+        self.mtk.daloader.daconfig.da_loader = self.da_loader
         return self.da_loader
 
 

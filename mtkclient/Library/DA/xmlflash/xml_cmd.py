@@ -55,6 +55,24 @@ class XMLCmd(metaclass=LogBase):
         cmd = self.create_cmd("SECURITY-SET-FLASH-POLICY", content)
         return cmd
 
+    def cmd_security_set_allinone_signature(self, host_offset: int = 0x8000000,
+                                      length: int = 0x100000, filename:str=None):
+        """
+        <?xml version="1.0" encoding="utf-8"?><da><version>1.0</version>
+        <command>CMD:SECURITY-SET-ALLINONE-SIGNATURE</command><arg>
+        <source_file>MEM://0x8000000:0x100000</source_file></arg></da>
+        """
+        if filename is None:
+            filename = f"MEM://{hex(host_offset)}:{hex(length)}"
+        content = {
+            "arg": [
+                f"<source_file>{filename}</source_file>",
+            ]
+        }
+        cmd = self.create_cmd("SECURITY-SET-ALLINONE-SIGNATURE", content)
+        return cmd
+
+
     def cmd_boot_to(self, at_addr: int = 0x40000000, jmp_addr: int = 0x40000000, host_offset: int = 0x7fe83c09a04c,
                     length: int = 0x50c78):
         """

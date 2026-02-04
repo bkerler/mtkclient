@@ -222,6 +222,8 @@ def logsetup(self, logger, loglevel, signal=None):
         self.warning = signal.emit
     if loglevel == logging.DEBUG:
         logfilename = os.path.join("logs", "log.txt")
+        if not os.path.exists(os.path.dirname(logfilename)):
+            os.makedirs(os.path.dirname(logfilename))
         fh = logging.FileHandler(logfilename, encoding='utf-8')
         logger.addHandler(fh)
         logger.setLevel(logging.DEBUG)

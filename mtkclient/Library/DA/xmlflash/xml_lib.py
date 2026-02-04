@@ -22,6 +22,8 @@ from mtkclient.Library.thread_handling import writedata
 from mtkclient.Library.DA.xmlflash.xml_cmd import XMLCmd, BootModes
 from mtkclient.Library.DA.xmlflash.extension.v6 import XmlFlashExt
 from mtkclient.Library.Auth.sla import generate_da_sla_signature
+from mtkclient.Library.Exploit.carbonara import Carbonara
+from mtkclient.Library.Exploit.hakujoudai import Hakujoudai
 
 
 class ShutDownModes:
@@ -103,12 +105,7 @@ class DAXML(metaclass=LogBase):
         self.generatekeys = self.mtk.config.generatekeys
         if self.generatekeys:
             self.mtk.daloader.patch = True
-        try:
-            from mtkclient.Library.Exploit.carbonara import Carbonara
-            self.carbonara = Carbonara(self.mtk, loglevel)
-        except Exception:
-            self.carbonara = None
-
+        self.carbonara = Carbonara(self.mtk, loglevel)
         self.xmlft = XmlFlashExt(self.mtk, self, loglevel)
 
     def xread(self):
@@ -146,13 +143,13 @@ class DAXML(metaclass=LogBase):
         return False
 
     def ack(self):
-        return self.xsend("OK")
+        return self.xsend("OK\0")
 
     def ack_value(self, length):
-        return self.xsend(f"OK@{hex(length)}")
+        return self.xsend(f"OK@{hex(length)}\0")
 
     def ack_text(self, text):
-        return self.xsend(f"OK@{text}")
+        return self.xsend(f"OK@{text}\0")
 
     def setup_env(self):
         da_log_level = int(self.daconfig.uartloglevel)
@@ -172,7 +169,7 @@ class DAXML(metaclass=LogBase):
         return res
 
     def send_command(self, xmldata, noack: bool = False):
-        if self.xsend(xmldata):
+        if self.xsend(data=xmldata):
             result = self.get_response()
             if result == "OK":
                 if noack:
@@ -289,7 +286,7 @@ class DAXML(metaclass=LogBase):
             else:
                 self.mtk.daloader.patch = False
             self.daconfig.da2 = da2[:-da2sig_len]
-
+            self.daconfig.da1 = da1
             if self.mtk.preloader.send_da(da1address, da1size, da1sig_len, da1):
                 self.info("Successfully uploaded stage 1, jumping ..")
                 if self.mtk.preloader.jump_da(da1address):
@@ -441,8 +438,11 @@ class DAXML(metaclass=LogBase):
             # info = result.info
             source_file = result.source_file
             packet_length = result.packet_length
-            tmp = source_file.split(":")[2]
-            length = int(tmp[2:], 16)
+            if ":" in source_file:
+                tmp = source_file.split(":")[2]
+                length = int(tmp[2:], 16)
+            else:
+                length = len(data)
             pg = progress(total=length, prefix="Upload:", guiprogress=self.mtk.config.guiprogress)
             self.ack_value(length)
             resp = self.get_response()
@@ -592,18 +592,39 @@ class DAXML(metaclass=LogBase):
                 return True
         return False
 
+    def handle_allinone_signature(self, data=b"\x00" * 0x100, filename:str=None, display=True, timeout=0.5):
+        if filename is None:
+            result = self.send_command(self.cmd.cmd_security_set_allinone_signature(host_offset=0x8000000,
+                                                                                    length=len(data),
+                                                                                    filename=filename))
+        else:
+            result = self.send_command(self.cmd.cmd_security_set_allinone_signature(filename=filename))
+        if type(result) is DwnFile:
+            self.info("Uploading allinone signature...")
+            if self.upload(result=result, data=data, display=False):
+                self.info("Successfully uploaded allinone signature.")
+                return True
+        return False
+
     def upload_da(self):
         self.daext = False
         if self.upload_da1():
-            self.info("Stage 1 successfully loaded.")
+            self.info("DA Stage 1 successfully loaded.")
             da2 = self.daconfig.da2
             da2offset = self.daconfig.da_loader.region[2].m_start_addr
+            self.hakujoudai = Hakujoudai(self.mtk, self.loglevel)
+
             if not self.mtk.daloader.patch and not self.mtk.config.stock:
-                if self.carbonara is not None and self.mtk.config.target_config["sbc"]:
+                if self.mtk.config.target_config["sbc"] and self.carbonara.check_for_carbonara_patched(self.daconfig.da1):
                     loaded = self.carbonara.patchda1_and_upload_da2()
                     if loaded:
                         self.mtk.daloader.patch = True
+                elif self.mtk.config.target_config["sbc"] and self.hakujoudai.is_vulnerable():
+                    loaded = self.boot_to(da2offset, da2)
+                    if self.hakujoudai.run_exploit():
+                        self.mtk.daloader.patch = True
                 else:
+                    # We cannot patch, run with stock da2 :(
                     loaded = self.boot_to(da2offset, da2)
                     if not loaded:
                         self.daext = False
@@ -611,6 +632,7 @@ class DAXML(metaclass=LogBase):
                     elif self.mtk.config.target_config["sbc"]:
                         self.mtk.daloader.patch = True
             else:
+                # Unprotected and patched OR stock option
                 loaded = self.boot_to(da2offset, da2)
             if loaded:
                 self.info("Successfully uploaded stage 2")
