@@ -73,7 +73,6 @@ def add_auth_group(parser):
     g.add_argument('--cert', type=str, help="Use cert file")
 
 
-
 def add_debug_group(parser):
     g = parser.add_argument_group("Debug & Sector")
     g.add_argument('--debugmode', action='store_true', help='Enable verbose mode')
@@ -209,9 +208,12 @@ def main():
         .add_argument("metamode", nargs="?", default=None, help=f"[{metamodes}]")
     subparsers.add_parser("meta2", help="Enter meta mode (wdt)", parents=[base])
 
-    subparsers.add_parser("dumpbrom", help=CMDS_HELP["dumpbrom"], parents=[base])
-    subparsers.add_parser("dumpsram", help=CMDS_HELP["dumpsram"], parents=[base])
-    subparsers.add_parser("dumppreloader", help=CMDS_HELP["dumppreloader"], parents=[base])
+    subparsers.add_parser("dumpbrom", help=CMDS_HELP["dumpbrom"], parents=[base]
+                          ).add_argument('--filename', help='Optional filename')
+    subparsers.add_parser("dumpsram", help=CMDS_HELP["dumpsram"], parents=[base]
+                          ).add_argument('--filename', help='Optional filename')
+    subparsers.add_parser("dumppreloader", help=CMDS_HELP["dumppreloader"], parents=[base]
+                          ).add_argument('--filename', help='Optional filename')
 
     parser_payload = subparsers.add_parser("payload", help=CMDS_HELP["payload"], parents=[base])
     parser_payload.add_argument("--payload", type=str, help="Payload file (optional)")

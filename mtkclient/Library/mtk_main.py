@@ -483,6 +483,8 @@ class Main(metaclass=LogBase):
                     self.warning("We couldn't enter preloader.")
                 plt = PLTools(rmtk, self.__logger.level)
                 data, filename = plt.run_dump_preloader(self.args.ptype)
+                if self.args.filename is not None:
+                    filename = self.args.filename
                 if filename is None:
                     filename = "preloader.bin"
                 if data is not None:
