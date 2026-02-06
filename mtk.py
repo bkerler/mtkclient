@@ -204,7 +204,7 @@ def main():
     cmd_fs.add_argument("--rw", action="store_true")
 
     subparsers.add_parser("reset", help="Send reset command", parents=[base])
-    subparsers.add_parser("meta", help="Enter meta mode", parents=[base])\
+    subparsers.add_parser("meta", help="Enter meta mode", parents=[base]) \
         .add_argument("metamode", nargs="?", default=None, help=f"[{metamodes}]")
     subparsers.add_parser("meta2", help="Enter meta mode (wdt)", parents=[base])
 

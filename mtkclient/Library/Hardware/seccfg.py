@@ -67,6 +67,7 @@ class SecCfgV4(metaclass=LogBase):
         if _hash == dec_hash:
             self.hwtype = "SW"
         else:
+            self.custom_sej_hw = None
             if self.custom_sej_hw is not None:
                 # ddata = self.protect(self.hash)
                 status, dec_hash = self.custom_sej_hw(encrypt=False,

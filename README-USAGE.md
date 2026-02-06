@@ -100,6 +100,21 @@ python mtk.py reset
 
 10. Disconnect usb cable and enjoy your rooted phone :)
 
+### Unlock flow for stock mtk with android >=9
+1. Unlock seccfg
+```shell
+python mtk.py da seccfg unlock
+```
+
+2. Wipe userdata,metadata,md_udc,cache partitions
+```shell
+python mtk.py e userdata,metadata,md_udc,cache
+```
+
+2. Disable verity + verification on vbmeta
+```shell
+python mtk.py da vbmeta 3
+```
 
 ### Boot to meta mode via payload
 
