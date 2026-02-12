@@ -130,15 +130,8 @@ class Port(metaclass=LogBase):
         ep_in = self.cdc.EP_IN.read
         maxinsize = self.cdc.EP_IN.wMaxPacketSize
 
-        self.cdc.set_line_coding(921600, 0, 8, 1)
-        self.cdc.setcontrollinestate(rts=True)
-
         startcmd = b"\xa0\x0a\x50\x05"
         expected_echo = bytes(~b & 0xFF for b in startcmd)  # Precompute: b'\x5f\xf5\xaf\xfa'
-
-        brom_pids = [0x3, 0xF200, 0xD1E9, 0xD1E2, 0xD1EC, 0xD1DD]
-        if self.cdc.pid not in brom_pids:
-            ep_out(b"\xa0")  # Send first byte separately if needed
 
         for attempt in range(retries):
             received = b""
@@ -161,7 +154,7 @@ class Port(metaclass=LogBase):
 
             except Exception as e:  # Includes USBError, timeout, pipe error
                 self.debug(f"Handshake attempt {attempt + 1} failed: {e}")
-                time.sleep(0.01)  # Short backoff
+                time.sleep(0.005)  # Short backoff
 
             # Optional: flush input buffer before retry
             try:
