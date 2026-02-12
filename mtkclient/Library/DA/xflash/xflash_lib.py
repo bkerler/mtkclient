@@ -84,10 +84,14 @@ class DAXFlash(metaclass=LogBase):
 
     def ack(self, rstatus=True):
         try:
-            tmp = pack("<III", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4)
-            data = pack("<I", 0)
-            self.usbwrite(tmp)
-            self.usbwrite(data)
+            if self.mtk.config.chipconfig.dacode in [0x6781]:
+                stmp = pack("<IIII", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4, 0)
+                self.usbwrite(stmp)
+            else: # needed for 0x6750, 0x6762, 0x6785, 0x6761
+                stmp = pack("<III", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4)
+                self.usbwrite(stmp)
+                stmp = pack("<I", 0)
+                self.usbwrite(stmp)
             if rstatus:
                 status = self.status()
                 return status
@@ -745,8 +749,7 @@ class DAXFlash(metaclass=LogBase):
                             rq.put(bytes(chunk_buffer))
                         else:
                             buffer.extend(chunk_buffer)
-                        stmp = pack("<IIII", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4, 0)
-                        self.usbwrite(stmp)
+                        self.ack(rstatus=False)
                         ld = len(chunk_buffer)
                         bytestoread -= ld
                         bytesread += ld

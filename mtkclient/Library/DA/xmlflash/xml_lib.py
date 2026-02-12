@@ -23,7 +23,7 @@ from mtkclient.Library.DA.xmlflash.xml_cmd import XMLCmd, BootModes
 from mtkclient.Library.DA.xmlflash.extension.v6 import XmlFlashExt
 from mtkclient.Library.Auth.sla import generate_da_sla_signature
 from mtkclient.Library.Exploit.carbonara import Carbonara
-from mtkclient.Library.Exploit.hakujoudai import Hakujoudai
+from mtkclient.Library.Exploit.heapbait import Heapbait
 
 
 class ShutDownModes:
@@ -612,16 +612,16 @@ class DAXML(metaclass=LogBase):
             self.info("DA Stage 1 successfully loaded.")
             da2 = self.daconfig.da2
             da2offset = self.daconfig.da_loader.region[2].m_start_addr
-            self.hakujoudai = Hakujoudai(self.mtk, self.loglevel)
+            self.heapbait = Heapbait(self.mtk, self.loglevel)
 
             if not self.mtk.daloader.patch and not self.mtk.config.stock:
                 if self.mtk.config.target_config["sbc"] and self.carbonara.check_for_carbonara_patched(self.daconfig.da1):
                     loaded = self.carbonara.patchda1_and_upload_da2()
                     if loaded:
                         self.mtk.daloader.patch = True
-                elif self.mtk.config.target_config["sbc"] and self.hakujoudai.is_vulnerable():
+                elif self.mtk.config.target_config["sbc"] and self.heapbait.is_vulnerable():
                     loaded = self.boot_to(da2offset, da2)
-                    if self.hakujoudai.run_exploit():
+                    if self.heapbait.run_exploit():
                         self.mtk.daloader.patch = True
                 else:
                     # We cannot patch, run with stock da2 :(

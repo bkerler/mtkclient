@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# MTK Flash Client (c) B.Kerler 2018-2025.
+# MTK Flash Client (c) B.Kerler 2018-2026.
 # Licensed under GPLv3 License
 import os
 import sys
