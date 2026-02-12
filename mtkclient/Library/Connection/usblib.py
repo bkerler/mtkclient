@@ -352,7 +352,7 @@ class UsbClass(DeviceClass):
             try:
                 usb.util.claim_interface(self.device, 0)
             except Exception:
-                pass
+                return False
 
             self.debug(self.configuration)
             try:

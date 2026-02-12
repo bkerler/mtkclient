@@ -125,44 +125,29 @@ class Port(metaclass=LogBase):
                 pass
         return False
 
-    def run_handshake(self, retries=5):
+    def run_handshake(self):
         ep_out = self.cdc.EP_OUT.write
         ep_in = self.cdc.EP_IN.read
         maxinsize = self.cdc.EP_IN.wMaxPacketSize
 
+        i = 0
         startcmd = b"\xa0\x0a\x50\x05"
-        expected_echo = bytes(~b & 0xFF for b in startcmd)  # Precompute: b'\x5f\xf5\xaf\xfa'
-
-        for attempt in range(retries):
-            received = b""
-            try:
-                for byte in startcmd:
-                    written = ep_out(bytes([byte]), timeout=500)  # Explicit timeout
-                    if written != 1:
-                        raise ValueError("Write failed")
-
-                    # Read exactly 1 echo byte (fastest)
-                    echo = ep_in(1, timeout=500)
-                    if len(echo) != 1 or echo[0] != (~byte & 0xFF):
-                        raise ValueError(f"Echo mismatch: got {echo!r}, expected {~byte & 0xFF:02x}")
-
-                    received += echo
-
-                if received == expected_echo:
-                    self.info("Device detected :)")
-                    return True
-
-            except Exception as e:  # Includes USBError, timeout, pipe error
-                self.debug(f"Handshake attempt {attempt + 1} failed: {e}")
-                time.sleep(0.005)  # Short backoff
-
-            # Optional: flush input buffer before retry
-            try:
-                ep_in(maxinsize, timeout=50)  # Discard any stale data
-            except:
-                pass
-
-        self.info("Handshake failed after retries")
+        length = len(startcmd)
+        # On preloader, send 0xa0 first
+        if self.cdc.pid!=0x3:
+            ep_out(startcmd[0:1])
+        try:
+            while i < length:
+                if ep_out(startcmd[i:i+1]):
+                    if ep_in(maxinsize)[-1] == ~(startcmd[i]) & 0xFF:
+                        i += 1
+                    else:
+                        i = 0
+            self.info("Device detected :)")
+            return True
+        except Exception as serr:
+            self.debug(str(serr))
+            time.sleep(0.005)
         return False
 
     def handshake(self, maxtries=None, loop=0):
