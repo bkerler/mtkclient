@@ -150,7 +150,7 @@ class SerialPortDialog(QDialog):
 class DeviceHandler(QObject):
     sendToLogSignal = Signal(str)
     update_status_text = Signal(str)
-    sendToProgressSignal = Signal(int)
+    sendToProgressSignal = Signal(object)
     da_handler = None
 
     def __init__(self, parent, preloader: str = None, loader: str = None, loglevel=logging.INFO, *args, **kwargs):
@@ -354,7 +354,7 @@ class MainWindow(QMainWindow):
         self.ui.erasepreloaderbtn.setEnabled(True)
         self.ui.eraserpmbbtn.setEnabled(True)
 
-    @Slot(int)
+    @Slot(object)
     def updateProgress(self, progress):
         try:
             self.Status["currentPartitionSizeDone"] = progress
