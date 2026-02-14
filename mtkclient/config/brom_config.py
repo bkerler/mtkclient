@@ -714,6 +714,7 @@ hwconfig = {
     0x6575: Chipconfig(  # var1
         watchdog=0xC0000000,
         uart=0xC1009000,
+        brom_payload_addr=0xf0000a00,
         da_payload_addr=0xc2001000,
         pl_payload_addr=0xc2058000,
         # gcpu_base
@@ -722,6 +723,11 @@ hwconfig = {
         # cqdma_base
         ap_dma_mem=0xC100119C,
         # blacklist
+        send_ptr=(0xf00025fc,0xffffa0a0),
+        cmd_handler=0xffffad5c,
+        brom_register_access=(0xffffa3aa, 0xffffa4c4),
+        meid_addr=0xf0002af4,
+        efuse_addr=0xc1019000,
         damode=DAmodes.LEGACY,
         dacode=0x6575,
         name="MT6575/MT6577/MT8317"),
