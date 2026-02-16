@@ -836,18 +836,19 @@ class DAXFlash(metaclass=LogBase):
             if os.path.exists(filename):
                 fsize = os.stat(filename).st_size
                 length = min(fsize, length)
-                if length % 512 != 0:
-                    fill = 512 - (length % 512)
-                    length += fill
                 fh = open(filename, "rb")
                 fh.seek(offset)
             else:
                 self.error(f"Filename doesn't exists: {filename}, aborting flash write.")
                 return False
+        if length % 512 != 0:
+            fill = 512 - (length % 512)
+            length += fill
         partinfo = self.daconfig.storage.get_storage(parttype, length)
         if not partinfo:
             return False
-        storage, parttype, length = partinfo
+        storage, parttype, plength = partinfo
+        length = min(length, plength)
         pg = progress(total=length, prefix="Write:", guiprogress=self.mtk.config.guiprogress)
         # self.send_devctrl(self.Cmd.START_DL_INFO)
         plen = self.get_packet_length()
@@ -865,6 +866,9 @@ class DAXFlash(metaclass=LogBase):
                             data.extend(b"\x00" * fill)
                     else:
                         data = wdata[pos:pos + dsize]
+                    if len(data) % 512 != 0:
+                        fill = 512 - (len(data) % 512)
+                        data += fill * b"\x00"
                     if display:
                         pg.update(len(data))
                     checksum = sum(data) & 0xFFFF

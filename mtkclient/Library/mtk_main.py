@@ -370,16 +370,10 @@ class Main(metaclass=LogBase):
         except Exception:
             pass
         try:
-            iot = self.args.iot
-            config.iot = iot
-        except Exception:
-            pass
-        try:
             disable_internal_flash = self.args.disable_internal_flash
             config.internal_flash = not disable_internal_flash
         except Exception:
             pass
-
         try:
             auth = self.args.auth
             config.auth = auth
@@ -431,7 +425,10 @@ class Main(metaclass=LogBase):
                 return
             commands = open(self.args.script, "r").read().splitlines()
             da_handler = DaHandler(mtk, loglevel)
-            mtk = da_handler.configure_da(mtk, directory)
+            mtk = da_handler.connect(mtk, directory)
+            if mtk is None:
+                return
+            mtk = da_handler.configure_da(mtk)
             if mtk is not None:
                 for rcmd in commands:
                     self.args = parser.parse_args(rcmd.split(" "))
@@ -446,7 +443,11 @@ class Main(metaclass=LogBase):
             # Split the commands in the multi argument
             commands = self.args.commands.split(';')
             da_handler = DaHandler(mtk, loglevel)
-            mtk = da_handler.configure_da(mtk, directory)
+            mtk = da_handler.connect(mtk, directory)
+            if mtk is None:
+                self.close()
+                return
+            mtk = da_handler.configure_da(mtk)
             if mtk is not None:
                 for rcmd in commands:
                     self.args = parser.parse_args(rcmd.split(" "))
@@ -723,12 +724,13 @@ class Main(metaclass=LogBase):
                     mtk.step = int(self.args.step, 16)
             except Exception:
                 pass
-
-            mtk = da_handler.configure_da(mtk, directory)
+            mtk = da_handler.connect(mtk, directory)
             if mtk is not None:
-                self.info("Handling da commands ...")
-                da_handler.handle_da_cmds(mtk, cmd, self.args)
-                mtk.port.close()
+                mtk = da_handler.configure_da(mtk)
+                if mtk is not None:
+                    self.info("Handling da commands ...")
+                    da_handler.handle_da_cmds(mtk, cmd, self.args)
+                    mtk.port.close()
             self.close()
 
     def cmd_log(self, mtk, filename):

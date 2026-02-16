@@ -353,7 +353,5 @@ class Storage(metaclass=LogBase):
             else:
                 parttype = EmmcPartitionType.MTK_DA_EMMC_PART_USER
             self.flashsize = self.nor.available_size
-        if length < 0x20000:
-            length = 0x20000
         length = min(length, self.flashsize)
         return [storage, parttype, length]

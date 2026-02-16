@@ -944,6 +944,9 @@ class DAXML(metaclass=LogBase):
                     data = fh.read(length)
                 else:
                     data = wdata
+                if len(data) % 512 != 0:
+                    fill = 512 - (len(data) % 512)
+                    data += fill*b"\x00"
                 if not self.upload(result, data, raw=True):
                     self.error("Error on writing flash at 0x%08X" % addr)
                     return False

@@ -139,7 +139,7 @@ class Preloader(metaclass=LogBase):
         self.echo = self.mtk.port.echo
         self.sendcmd = self.mtk.port.mtk_cmd
 
-    def init(self, maxtries=None, display=True, directory: str = None):
+    def init(self, display=True, directory: str = None):
         if directory:
             self.mtk.config.hwparam_path = directory
         if os.path.exists(os.path.join(self.mtk.config.hwparam_path, ".state")):
@@ -213,6 +213,8 @@ class Preloader(metaclass=LogBase):
         self.get_blver()
         self.get_bromver()
         meid = None
+        if self.config.chipconfig.iot:
+            self.config.iot = True
         if not self.config.iot:
             res = self.get_hw_sw_ver()
             self.config.hw_sub_code = 0
@@ -262,6 +264,7 @@ class Preloader(metaclass=LogBase):
                 self.error(f"Couldn't find cert file {self.config.cert}")
         if self.config.iot:
             if self.config.hwcode == 0x6261:
+                self.config.internal_flash = True
                 RTC_BASE = 0xA0710000
                 PMU_BASE = 0xA0700000
                 EMI_REMAP = 0xA0510000
@@ -329,27 +332,35 @@ class Preloader(metaclass=LogBase):
                     self.write32(EMI_REMAP,
                                  self.read32(
                                      EMI_REMAP) | MR_FB0RB1)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
-
-            if self.config.internal_flash:
-                self.dump_internal_flash()
-
         if self.config.target_config["sla"] and self.config.chipconfig.damode == DAmodes.XML:
             self.handle_sla(func=None, isbrom=self.config.is_brom)
         return True
 
-    def dump_internal_flash(self):
+    def dump_internal_flash(self, offset: int = 0, length: int = 0, step: int = 0,
+                            filename: str = "internal_flash.bin"):
         flash = bytearray()
-        pg = progress(pagesize=1, total=self.mtk.length, prefix="Dumping internal flash..", offset=self.mtk.offset)
-        with open("internal_flash.bin", "wb") as wf:
-            for pos in range(self.mtk.offset, self.mtk.length, self.mtk.step):
-                data = b"".join([int.to_bytes(x, 4, 'little') for x in self.read32(pos, dwords=self.mtk.step // 4)])
-                if data == b"":
-                    data = b"\x00" * self.mtk.step
-                wf.write(data)
-                pg.update(len(data))
-                flash.extend(data)
-            pg.done()
-        print("Done reading internal flash to \"internal_flash.bin\"")
+        pg = progress(pagesize=1, total=length, prefix="Dumping internal flash..", offset=offset)
+        try:
+            pos = offset
+            bytestoread = length
+            while bytestoread > 0:
+                tmp = self.read(addr=pos, dwords=step // 4, length=32, direct=True)
+                rlen = len(tmp)
+                if rlen == 0:
+                    break
+                flash.extend(tmp)
+                pg.update(rlen)
+                pos += rlen
+                bytestoread -= rlen
+        except Exception:
+            return b""
+        pg.done()
+        if len(flash) > 0 and filename != "":
+            with open("internal_flash.bin", "wb") as wf:
+                wf.write(flash)
+                print("Done reading internal flash to \"internal_flash.bin\"")
+        elif len(flash) > 0:
+            return flash
         sys.stdout.flush()
 
     def read_a2(self, addr, dwords=1) -> list:
@@ -361,7 +372,7 @@ class Preloader(metaclass=LogBase):
                 return unpack(">H", self.usbread(2))[0]
         return []
 
-    def read(self, addr, dwords=1, length=32) -> list:
+    def read(self, addr, dwords=1, length=32, direct: bool = False) -> list:
         result = []
         cmd = self.Cmd.READ16 if length == 16 else self.Cmd.READ32
         if self.echo(cmd.value):
@@ -370,7 +381,7 @@ class Preloader(metaclass=LogBase):
                 status = self.rword()
                 if ack and status <= 0xFF:
                     if length == 32:
-                        result = self.rdword(dwords)
+                        result = self.rdword(dwords, direct=direct)
                     else:
                         result = self.rword(dwords)
                     status2 = unpack(">H", self.usbread(2))[0]
@@ -382,6 +393,9 @@ class Preloader(metaclass=LogBase):
 
     def read32(self, addr, dwords=1) -> (list, int):
         return self.read(addr, dwords, 32)
+
+    def read32_direct(self, addr, dwords=1) -> (list, int):
+        return self.read(addr, dwords, 32, direct=True)
 
     def read16(self, addr, dwords=1) -> (list, int):
         return self.read(addr, dwords, 16)

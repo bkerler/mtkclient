@@ -30,6 +30,7 @@ class Mtk(metaclass=LogBase):
         self.pid = config.pid
         self.interface = config.interface
         self.pathconfig = PathConfig()
+        self.reinited = False
         self.__logger, self.info, self.debug, self.warning, self.error = logsetup(self, self.__logger, loglevel,
                                                                                   config.gui)
         self.eh = ErrorHandler()
@@ -176,7 +177,7 @@ class Mtk(metaclass=LogBase):
                     rmtk = Mtk(config=self.config, loglevel=self.__logger.level,
                                serialportname=rmtk.port.serialportname)
                     rmtk.preloader.display = display
-                    if rmtk.preloader.init(maxtries=20):
+                    if rmtk.preloader.init():
                         if rmtk.config.is_brom:
                             break
             else:
@@ -187,7 +188,7 @@ class Mtk(metaclass=LogBase):
                     pass
                 rmtk = Mtk(config=self.config, loglevel=self.__logger.level, serialportname=rmtk.port.serialportname)
                 rmtk.preloader.display = display
-                if rmtk.preloader.init(maxtries=20):
+                if rmtk.preloader.init():
                     return rmtk
         return rmtk
 

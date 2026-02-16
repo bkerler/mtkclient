@@ -1014,10 +1014,13 @@ class DALegacy(metaclass=LogBase):
             count = min(0x100000, length - offset)
             if fh:
                 data = bytearray(fh.read(count))
-                if len(data) < count:
-                    data.extend(b"\x00" * fill)
             else:
                 data = wdata[offset:offset + count]
+            if len(data) < count:
+                data.extend(b"\x00" * fill)
+            if len(data) % 512 != 0:
+                fill = 512 - (len(data) % 512)
+                data += fill*b"\x00"
             self.usbwrite(data)
             chksum = sum(data) & 0xFFFF
             self.usbwrite(pack(">H", chksum))
@@ -1229,22 +1232,21 @@ class DALegacy(metaclass=LogBase):
 
 
 if __name__ == "__main__":
-    """
     from mtkclient.Library.mtk_class import Mtk
     from mtkclient.config.mtk_config import MtkConfig
 
     config = MtkConfig(logging.INFO)
-    config.init_hwcode(0x6592)
-    config.hwver = 0xca00
+    config.init_hwcode(0x6575)
+    config.hwver = 0x0
     config.swver = 0
     # config.loader = open("../../../../DA_Loader/V5/htc/MTK_AllInOne_DA_SWSEC_HTC.9286c98a.bin","rb").read()
     mtk = Mtk(config=config, loglevel=logging.INFO,
               serialportname=None)
     from mtkclient.Library.DA.daconfig import DAconfig
-
     daconfig = DAconfig(mtk=mtk, loader=mtk.config.loader,
                         preloader=mtk.config.preloader, loglevel=logging.INFO)
-    daconfig.parse_da_loader("../../../../DA_Loader/V5/htc/MTK_AllInOne_DA_SWSEC_HTC.9286c98a.bin", daconfig.dasetup)
+    daconfig.setup()
+    """daconfig.parse_da_loader("../../../../DA_Loader/V5/htc/MTK_AllInOne_DA_SWSEC_HTC.9286c98a.bin", daconfig.dasetup)
     mtk.daloader.daconfig.setup()
     from mtkclient.Library.DA.legacy.extension.legacy import LegacyExt
 

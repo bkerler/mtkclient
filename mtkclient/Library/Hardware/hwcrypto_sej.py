@@ -879,11 +879,11 @@ class Sej(metaclass=LogBase):
         if iv is None:
             iv = self.g_HACC_CFG_1
         self.tz_pre_init()
-        self.info("HACC init")
+        self.info("AES128 CBC - HACC init")
         self.SEJ_V3_Init(ben=encrypt, iv=iv, legacy=legacy)
-        self.info("HACC run")
+        self.info("AES128 CBC - HACC run")
         buf2 = self.HACC_V3_Run(buf)
-        self.info("HACC terminate")
+        self.info("AES128 CBC - HACC terminate")
         self.sej_terminate()
         return buf2
 
@@ -976,11 +976,11 @@ class Sej(metaclass=LogBase):
     def sej_sec_cfg_hw(self, data, encrypt=True, noxor=False):
         if encrypt and not noxor:
             data = self.xor_data(bytearray(data))
-        self.info("HACC init")
+        self.info("SecCfg Hw - HACC init")
         self.SEJ_V3_Init(ben=encrypt, iv=self.g_HACC_CFG_1, legacy=True)
-        self.info("HACC run")
+        self.info("SecCfg Hw - HACC run")
         dec = self.HACC_V3_Run(data)
-        self.info("HACC terminate")
+        self.info("SecCfg Hw - HACC terminate")
         self.sej_terminate()
         if not encrypt and not noxor:
             dec = self.xor_data(dec)
@@ -1005,19 +1005,19 @@ class Sej(metaclass=LogBase):
         dec = None
         if user == 0:
             iv = self.g_HACC_CFG_1
-            self.info("HACC init")
+            self.info("SP_HAcc0 - HACC init")
             self.SEJ_V3_Init(ben=b_en, iv=iv)
-            self.info("HACC run")
+            self.info("SP_HAcc0 - HACC run")
             dec = self.HACC_V3_Run(buf)
-            self.info("HACC terminate")
+            self.info("SP_HAcc0 - HACC terminate")
             self.sej_terminate()
         elif user == 1:
             iv = self.g_HACC_CFG_2
-            self.info("HACC init")
+            self.info("SP_HAcc1 - HACC init")
             self.SEJ_V3_Init(ben=b_en, iv=iv)
-            self.info("HACC run")
+            self.info("SP_HAcc1 - HACC run")
             dec = self.HACC_V3_Run(buf)
-            self.info("HACC terminate")
+            self.info("SP_HAcc1 - HACC terminate")
             self.sej_terminate()
         elif user == 2:
             self.sej_set_key(key=2, flag=32)
@@ -1025,11 +1025,11 @@ class Sej(metaclass=LogBase):
             dec = self.sej_do_aes(encrypt=aes_type, iv=iv, data=buf, length=len(buf))
         elif user == 3:
             iv = self.g_HACC_CFG_3
-            self.info("HACC init")
+            self.info("SP_HAcc3 - HACC init")
             self.SEJ_V3_Init(ben=b_en, iv=iv)
-            self.info("HACC run")
+            self.info("SP_HAcc3 - HACC run")
             dec = self.HACC_V3_Run(buf)
-            self.info("HACC terminate")
+            self.info("SP_HAcc3 - HACC terminate")
             self.sej_terminate()
         return dec
 
@@ -1054,11 +1054,11 @@ class Sej(metaclass=LogBase):
     def generate_mtee_hw(self, otp=None):
         if otp is not None:
             self.sej_set_otp(otp)
-        self.info("HACC init")
+        self.info("MTee - HACC init")
         self.SEJ_V3_Init(ben=True, iv=self.g_HACC_CFG_MTEE)
-        self.info("HACC run")
+        self.info("MTee - HACC run")
         dec = self.HACC_V3_Run(bytes.fromhex("7777772E6D6564696174656B2E636F6D30313233343536373839414243444546"))
-        self.info("HACC terminate")
+        self.info("MTee - HACC terminate")
         self.sej_terminate()
         return dec
 
@@ -1079,14 +1079,14 @@ class Sej(metaclass=LogBase):
         seed = (CustomSeed[2] << 16) | (CustomSeed[1] << 8) | CustomSeed[0] | (CustomSeed[3] << 24)
         iv = [seed, (~seed) & 0xFFFFFFFF, (((seed >> 16) | (seed << 16)) & 0xFFFFFFFF),
               (~((seed >> 16) | (seed << 16)) & 0xFFFFFFFF)]
-        self.info("HACC init")
+        self.info("Meta - HACC init")
         if encrypt and not noxor:
             data = self.xor_data(bytearray(data))
-        self.info("HACC init")
+        self.info("Meta - HACC init")
         self.SEJ_V3_Init(ben=encrypt, iv=iv, legacy=legacy)
-        self.info("HACC run")
+        self.info("Meta - HACC run")
         dec = self.HACC_V3_Run(data)
-        self.info("HACC terminate")
+        self.info("Meta - HACC terminate")
         self.sej_terminate()
         if not encrypt and not noxor:
             dec = self.xor_data(dec)

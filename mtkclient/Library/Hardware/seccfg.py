@@ -67,9 +67,18 @@ class SecCfgV4(metaclass=LogBase):
         if _hash == dec_hash:
             self.hwtype = "SW"
         else:
+            # for unlock, we enforce sw for easier debugging
             self.custom_sej_hw = None
             if self.custom_sej_hw is not None:
                 # ddata = self.protect(self.hash)
+                """
+                test=self.hwc.sej.crypto_meta_hw(m_sst_type=0x64,
+                                                 otp=self.mtk.config.get_otp(),
+                                                 unlock=True,
+                                                 data=self.hash,
+                                                 encrypt=False,
+                                                 samsung=False)
+                """
                 status, dec_hash = self.custom_sej_hw(encrypt=False,
                                                       data=self.hash,
                                                       cryptmode=sej_cryptmode.UNLOCK,

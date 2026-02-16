@@ -37,7 +37,7 @@ class MtkConfig(metaclass=LogBase):
         self.payloadfile = None
         self.loader = None
         self.iot = False
-        self.internal_flash = True
+        self.internal_flash = False
         self.gpt_file = None
         self.tr = QObject().tr
         self.ptype = "kamakiri2"
@@ -166,6 +166,8 @@ class MtkConfig(metaclass=LogBase):
             self.chipconfig.brom_payload_addr = 0x100A00
         if self.chipconfig.da_payload_addr is None:
             self.chipconfig.da_payload_addr = 0x200000
+        if self.chipconfig.iot is None:
+            self.chipconfig.iot = False
         if self.chipconfig.cqdma_base is None:
             self.chipconfig.cqdma_base = None
         if self.chipconfig.gcpu_base is None:

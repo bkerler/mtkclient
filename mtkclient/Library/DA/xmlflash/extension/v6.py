@@ -845,13 +845,23 @@ class XmlFlashExt(metaclass=LogBase):
         if seccfg_data[:0xC] == b"AND_SECCFG_v":
             self.info("Detected V3 Lockstate")
             sc_org = SecCfgV3(hwc, self.mtk, self.custom_sej_hw)
+            if not sc_org.parse(seccfg_data):
+                return False, "Device has is either already unlocked or algo is unknown. Aborting."
         elif seccfg_data[:4] == b"\x4D\x4D\x4D\x4D":
             self.info("Detected V4 Lockstate")
             sc_org = SecCfgV4(hwc, self.mtk, self.custom_sej_hw)
+            if not sc_org.parse(seccfg_data):
+                return False, "Device has is either already unlocked or algo is unknown. Aborting."
         else:
-            return False, "Unknown lockstate or no lockstate"
-        if not sc_org.parse(seccfg_data):
-            return False, "Device has is either already unlocked or algo is unknown. Aborting."
+            res = input(
+                "Unknown lockstate or no lockstate. Shall I write a new one ?\n" +
+                "Dangerous !! Type \"v3\" or \"v4\" for a new state. Press just enter to cancel.")
+            if res == "v3":
+                sc_org = SecCfgV3(hwc, self.mtk, self.custom_sej_hw)
+            elif res == "v4":
+                sc_org = SecCfgV4(hwc, self.mtk, self.custom_sej_hw)
+            else:
+                return False, "Unknown lockstate or no lockstate"
         ret, writedata = sc_org.create(lockflag=lockflag)
         if ret is False:
             return False, writedata

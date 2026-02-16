@@ -62,6 +62,7 @@ class DAloader(metaclass=LogBase):
             config["socid"] = hexlify(self.config.socid).decode('utf-8')
         config["flashtype"] = self.daconfig.storage.flashtype
         config["flashsize"] = self.daconfig.storage.flashsize
+        config["target_config"] = self.config.target_config
         if config["flashmode"] == "LEGACY":
             if self.mtk.config.chipconfig.dacode in [0x2625, 0x2523, 0x7682, 0x7686, 0x5932]:
                 config["m_nor_flash_size"] = self.daconfig.legacy_storage.nor.m_nor_flash_size
@@ -176,6 +177,7 @@ class DAloader(metaclass=LogBase):
             self.config.init_hwcode(self.config.hwcode)
             if self.flashmode == DAmodes.XML:
                 self.da = DAXML(self.mtk, self.daconfig, self.loglevel)
+                self.da.config.target_config = config["target_config"]
                 self.daconfig.storage.flashtype = config["flashtype"]
                 self.daconfig.storage.flashsize = config["flashsize"]
                 self.da.reinit()
@@ -184,6 +186,7 @@ class DAloader(metaclass=LogBase):
                 self.lft = None
             elif self.flashmode == DAmodes.XFLASH:
                 self.da = DAXFlash(self.mtk, self.daconfig, self.loglevel)
+                self.da.config.target_config = config["target_config"]
                 self.daconfig.storage.flashtype = config["flashtype"]
                 self.daconfig.storage.flashsize = config["flashsize"]
                 self.da.reinit()
@@ -192,6 +195,7 @@ class DAloader(metaclass=LogBase):
                 self.xmlft = None
             elif self.flashmode == DAmodes.LEGACY:
                 self.da = DALegacy(self.mtk, self.daconfig, self.loglevel)
+                self.da.config.target_config = config["target_config"]
                 self.daconfig.storage.flashtype = config["flashtype"]
                 self.daconfig.storage.flashsize = config["flashsize"]
                 self.daconfig.legacy_storage.nor = Legacy_NorInfo()

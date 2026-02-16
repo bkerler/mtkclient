@@ -101,9 +101,11 @@ class DeviceClass(metaclass=LogBase):
             length = self.maxsize
         return self.usbread(length, timeout)
 
-    def rdword(self, count=1, little=False):
+    def rdword(self, count=1, little=False, direct=False):
         rev = "<" if little else ">"
         value = self.usbread(4 * count)
+        if direct:
+            return value
         data = unpack(rev + "I" * count, value)
         if count == 1:
             return data[0]

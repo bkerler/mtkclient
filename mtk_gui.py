@@ -185,6 +185,9 @@ def getDevInfo(self, parameters):
     phone_info['chipset'] = (str(mtk_class.config.chipconfig.name) +
                              " (" + str(mtk_class.config.chipconfig.description) + ")")
     self.sendUpdateSignal.emit()
+    mtk_class = da_handler.connect(mtk_class)
+    if mtk_class is None:
+        return
     mtk_class = da_handler.configure_da(mtk_class)
     if mtk_class:
         phone_info['daInit'] = True

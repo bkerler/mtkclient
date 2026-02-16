@@ -22,7 +22,10 @@ def init(preloader, loader, serialport=None):
 
 def connect(mtk, directory=".", loglevel=logging.INFO):
     da_handler = DaHandler(mtk, loglevel)
-    mtk = da_handler.configure_da(mtk, directory)
+    mtk = da_handler.connect(mtk, directory)
+    if mtk is None:
+        return None, None
+    mtk = da_handler.configure_da(mtk)
     return mtk, da_handler
 
 

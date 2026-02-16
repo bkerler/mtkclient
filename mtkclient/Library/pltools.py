@@ -133,7 +133,7 @@ class PLTools(metaclass=LogBase):
                 portconfig = [[0xE8D, 0x0003, 1]]
                 mtk.port = Port(mtk=mtk, portconfig=portconfig, serialportname=mtk.port.serialportname,
                                 loglevel=self.__logger.level)
-                if mtk.preloader.init(maxtries=20):
+                if mtk.preloader.init():
                     break
         return mtk
 
