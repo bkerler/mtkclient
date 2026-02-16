@@ -237,7 +237,10 @@ def main():
 
     plstage=subparsers.add_parser("plstage", help=CMDS_HELP["plstage"], parents=[base])
     plstage.add_argument('--startpartition', help='Option for plstage - Boot to (lk, tee1)')
+    plstage.add_argument('--offset', help='Address to read from memory')
+    plstage.add_argument('--length', help='Bytes to read from memory')
     plstage.add_argument('--pl', help='pl stage filename (optional)')
+    plstage.add_argument("--metamode", type=str, help="metamode to use [off,usb,uart]")
 
 
     # DA subcommands
