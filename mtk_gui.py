@@ -48,7 +48,6 @@ path = PathConfig()
 MtkTool = Main(variables)
 
 guiState = "welcome"
-phoneInfo = {"chipset": "", "bootMode": "", "daInit": False, "cdcInit": False}
 
 class SerialPortDialog(QDialog):
     def __init__(self, parent=None):
@@ -168,9 +167,9 @@ class DeviceHandler(QObject):
         self.da_handler = DaHandler(Mtk(config=config, loglevel=logging.INFO), loglevel)
 
 
-def getDevInfo(self, parameters):
-    # loglevel = parameters[0]
-    phone_info = parameters[1]
+def getDevInfo(thread, parameters):
+    loglevel = parameters[0]  # Unused in snippet, but kept
+    phone_info = parameters[1]  # Shared dict reference
     _devhandler = parameters[2]
 
     mtk_class = _devhandler.da_handler.mtk
@@ -179,30 +178,36 @@ def getDevInfo(self, parameters):
         if not mtk_class.port.cdc.connect():
             mtk_class.preloader.init()
         else:
-            phone_info['cdcInit'] = True
-    except Exception:
-        phone_info['cantConnect'] = True
-    phone_info['chipset'] = (str(mtk_class.config.chipconfig.name) +
-                             " (" + str(mtk_class.config.chipconfig.description) + ")")
-    self.sendUpdateSignal.emit()
+            with lock:
+                phone_info['cdcInit'] = True
+    except Exception as e:
+        print(f"Connection exception: {e}")  # Add for debugging; replace with thread.sendToLogSignal if available
+        with lock:
+            phone_info['cantConnect'] = True
+    with lock:
+        phone_info['chipset'] = (str(mtk_class.config.chipconfig.name) +
+                                 " (" + str(mtk_class.config.chipconfig.description) + ")")
+    thread.sendUpdateSignal.emit(phone_info.copy())
     mtk_class = da_handler.connect(mtk_class)
     if mtk_class is None:
         return
     mtk_class = da_handler.configure_da(mtk_class)
     if mtk_class:
-        phone_info['daInit'] = True
-        phone_info['chipset'] = (str(mtk_class.config.chipconfig.name) +
-                                 " (" + str(mtk_class.config.chipconfig.description) + ")")
-        if mtk_class.config.is_brom:
-            phone_info['bootMode'] = "Bootrom mode"
-        elif mtk_class.config.chipconfig.damode:
-            phone_info['bootMode'] = "DA mode"
-        else:
-            phone_info['bootMode'] = "Preloader mode"
-        self.sendUpdateSignal.emit()
+        with lock:
+            phone_info['daInit'] = True
+            phone_info['chipset'] = (str(mtk_class.config.chipconfig.name) +
+                                     " (" + str(mtk_class.config.chipconfig.description) + ")")
+            if mtk_class.config.is_brom:
+                phone_info['bootMode'] = "Bootrom mode"
+            elif mtk_class.config.chipconfig.damode:
+                phone_info['bootMode'] = "DA mode"
+            else:
+                phone_info['bootMode'] = "Preloader mode"
+        thread.sendUpdateSignal.emit(phone_info.copy())
     else:
-        phone_info['cantConnect'] = True
-        self.sendUpdateSignal.emit()
+        with lock:
+            phone_info['cantConnect'] = True
+        thread.sendUpdateSignal.emit(phone_info.copy())
 
 
 def load_translations(application):
@@ -227,8 +232,9 @@ def load_translations(application):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, thread, app, devhandler:DeviceHandler, loglevel=logging.INFO):
+    def __init__(self, thread, app, devhandler:DeviceHandler, phoneInfo, loglevel=logging.INFO):
         super(MainWindow, self).__init__()
+        self.phoneInfo = phoneInfo
         self.loglevel = loglevel
         self.app = app
         self.readpartitionCheckboxes = None
@@ -291,49 +297,47 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def updateState(self):
-        #lock.acquire()
-        done_bytes = 0
-        curpart_bytes = (
-            self.Status)[f"currentPartitionSize{'Done' if 'currentPartitionSizeDone' in self.Status else ''}"]
+        with lock:
+            done_bytes = 0
+            curpart_bytes = (
+                self.Status)[f"currentPartitionSize{'Done' if 'currentPartitionSizeDone' in self.Status else ''}"]
 
-        if "allPartitions" in self.Status:
-            for partition in self.Status["allPartitions"]:
-                if self.Status["allPartitions"][partition]['done'] and partition != self.Status["currentPartition"]:
-                    done_bytes = done_bytes + self.Status["allPartitions"][partition]['size']
-            done_bytes = curpart_bytes + done_bytes
-            total_bytes = self.Status["totalsize"]
-            full_percentage_done = int((done_bytes / total_bytes) * 100)
-            self.ui.fullProgress.setValue(full_percentage_done)
-            timeinfototal = self.timeEstTotal.update(full_percentage_done, 100)
-            self.ui.fullProgressText.setText(f"<table width='100%'><tr><td><b>Total:</b> " +
-                                             f"{convert_size(done_bytes)} / {convert_size(total_bytes)}" +
-                                             f"</td><td align='right'>{timeinfototal}" +
-                                             f"{QCoreApplication.translate('main', ' left')}" +
-                                             f"</td></tr></table>")
-        else:
-            part_bytes = self.Status["currentPartitionSize"]
-            done_bytes = self.Status["currentPartitionSizeDone"]
-            full_percentage_done = int((done_bytes / part_bytes) * 100)
-            self.ui.fullProgress.setValue(full_percentage_done)
-            timeinfototal = self.timeEstTotal.update(full_percentage_done, 100)
-            self.ui.fullProgressText.setText("<table width='100%'><tr><td><b>Total:</b> " +
-                                             convert_size(done_bytes) + " / " + convert_size(part_bytes) +
-                                             "</td><td align='right'>" +
-                                             timeinfototal + QCoreApplication.translate("main",
-                                                                                        " left") + "</td></tr></table>")
+            if "allPartitions" in self.Status:
+                for partition in self.Status["allPartitions"]:
+                    if self.Status["allPartitions"][partition]['done'] and partition != self.Status["currentPartition"]:
+                        done_bytes = done_bytes + self.Status["allPartitions"][partition]['size']
+                done_bytes = curpart_bytes + done_bytes
+                total_bytes = self.Status["totalsize"]
+                full_percentage_done = int((done_bytes / total_bytes) * 100)
+                self.ui.fullProgress.setValue(full_percentage_done)
+                timeinfototal = self.timeEstTotal.update(full_percentage_done, 100)
+                self.ui.fullProgressText.setText(f"<table width='100%'><tr><td><b>Total:</b> " +
+                                                 f"{convert_size(done_bytes)} / {convert_size(total_bytes)}" +
+                                                 f"</td><td align='right'>{timeinfototal}" +
+                                                 f"{QCoreApplication.translate('main', ' left')}" +
+                                                 f"</td></tr></table>")
+            else:
+                part_bytes = self.Status["currentPartitionSize"]
+                done_bytes = self.Status["currentPartitionSizeDone"]
+                full_percentage_done = int((done_bytes / part_bytes) * 100)
+                self.ui.fullProgress.setValue(full_percentage_done)
+                timeinfototal = self.timeEstTotal.update(full_percentage_done, 100)
+                self.ui.fullProgressText.setText("<table width='100%'><tr><td><b>Total:</b> " +
+                                                 convert_size(done_bytes) + " / " + convert_size(part_bytes) +
+                                                 "</td><td align='right'>" +
+                                                 timeinfototal + QCoreApplication.translate("main",
+                                                                                            " left") + "</td></tr></table>")
 
-        if "currentPartitionSize" in self.Status:
-            part_bytes = self.Status["currentPartitionSize"]
-            part_done = (curpart_bytes / part_bytes) * 100
-            self.ui.partProgress.setValue(part_done)
-            timeinfo = self.timeEst.update(curpart_bytes, part_bytes)
-            txt = ("<table width='100%'><tr><td><b>Current partition:</b> " + self.Status["currentPartition"] +
-                   " (" + convert_size(curpart_bytes) + " / " + convert_size(part_bytes) +
-                   ") </td><td align='right'>" +
-                   timeinfo + QCoreApplication.translate("main", " left") + "</td></tr></table>")
-            self.ui.partProgressText.setText(txt)
-
-        #lock.release()
+            if "currentPartitionSize" in self.Status:
+                part_bytes = self.Status["currentPartitionSize"]
+                part_done = (curpart_bytes / part_bytes) * 100
+                self.ui.partProgress.setValue(part_done)
+                timeinfo = self.timeEst.update(curpart_bytes, part_bytes)
+                txt = ("<table width='100%'><tr><td><b>Current partition:</b> " + self.Status["currentPartition"] +
+                       " (" + convert_size(curpart_bytes) + " / " + convert_size(part_bytes) +
+                       ") </td><td align='right'>" +
+                       timeinfo + QCoreApplication.translate("main", " left") + "</td></tr></table>")
+                self.ui.partProgressText.setText(txt)
 
     def updateStateAsync(self, toolkit, parameters):
         while not self.Status["done"]:
@@ -556,45 +560,43 @@ class MainWindow(QMainWindow):
     def sendToProgress(self, progress):
         return
 
-    def updateGui(self):
-        phoneInfo['chipset'] = phoneInfo['chipset'].replace("()", "")
-        if phoneInfo['cdcInit'] and phoneInfo['bootMode'] == "":
-            self.ui.phoneInfoTextbox.setText(
-                QCoreApplication.translate("main", "Phone detected:\nReading model info..."))
-        else:
-            self.ui.phoneInfoTextbox.setText(QCoreApplication.translate("main",
-                                                                        "Phone detected:\n" + phoneInfo[
-                                                                            'chipset'] + "\n" + phoneInfo['bootMode']))
-        # Disabled due to graphical steps. Maybe this should come back somewhere else.
-        # self.ui.status.setText(QCoreApplication.translate("main","Device detected, please wait.\n" +
-        #   "This can take a while..."))
-        if phoneInfo['daInit']:
-            # self.ui.status.setText(QCoreApplication.translate("main","Device connected :)"))
-            self.ui.menubar.setEnabled(True)
-            self.pixmap = QPixmap(path.get_images_path("phone_connected.png"))
-            self.ui.phoneDebugInfoTextbox.setText("")
-            self.ui.pic.setPixmap(self.pixmap)
-            self.spinnerAnim.stop()
-            self.ui.spinner_pic.setHidden(True)
-            self.ui.connectInfo.setHidden(True)
-            self.ui.partProgress.setHidden(False)
-            self.ui.fullProgress.setHidden(False)
-            self.initread()
-            self.initkeys()
-            self.initunlock()
-            self.initerase()
-            self.initwrite()
-            self.getpartitions()
-            self.ui.tabWidget.setCurrentIndex(0)
-            self.ui.tabWidget.update()
-            self.ui.tabWidget.setHidden(False)
-
-        else:
-            if 'cantConnect' in phoneInfo:
+    @Slot()
+    def updateGui(self, phone_info):
+        with lock:
+            phone_info['chipset'] = phone_info['chipset'].replace("()", "")
+            if phone_info['cdcInit'] and phone_info['bootMode'] == "":
                 self.ui.phoneInfoTextbox.setText(
-                    QCoreApplication.translate("main", "Error initialising. Did you install the drivers?"))
-            self.spinnerAnim.start()
-            self.ui.spinner_pic.setHidden(False)
+                    QCoreApplication.translate("main", "Phone detected:\nReading model info..."))
+            else:
+                self.ui.phoneInfoTextbox.setText(QCoreApplication.translate("main",
+                                                                            "Phone detected:\n" + phone_info[
+                                                                                'chipset'] + "\n" + phone_info[
+                                                                                'bootMode']))
+            if phone_info['daInit']:
+                self.ui.menubar.setEnabled(True)
+                self.pixmap = QPixmap(path.get_images_path("phone_connected.png"))
+                self.ui.phoneDebugInfoTextbox.setText("")
+                self.ui.pic.setPixmap(self.pixmap)
+                self.spinnerAnim.stop()
+                self.ui.spinner_pic.setHidden(True)
+                self.ui.connectInfo.setHidden(True)
+                self.ui.partProgress.setHidden(False)
+                self.ui.fullProgress.setHidden(False)
+                self.initread()
+                self.initkeys()
+                self.initunlock()
+                self.initerase()
+                self.initwrite()
+                self.getpartitions()
+                self.ui.tabWidget.setCurrentIndex(0)
+                self.ui.tabWidget.update()
+                self.ui.tabWidget.setHidden(False)
+            else:
+                if 'cantConnect' in phone_info:
+                    self.ui.phoneInfoTextbox.setText(
+                        QCoreApplication.translate("main", "Error initialising. Did you install the drivers?"))
+                self.spinnerAnim.start()
+                self.ui.spinner_pic.setHidden(False)
 
     def spinnerAnimRot(self, angle):
         # trans = QTransform()
@@ -642,8 +644,9 @@ def main():
 
     loglevel = logging.INFO
     devhandler = DeviceHandler(parent=app, preloader=None, loader=None, loglevel=loglevel)
+    phoneInfo = {"chipset": "", "bootMode": "", "daInit": False, "cdcInit": False, "cantConnect": False}
     thread = asyncThread(parent=app, n=0, function=getDevInfo, parameters=[loglevel, phoneInfo, devhandler])
-    win = MainWindow(thread,app, devhandler, loglevel)
+    win = MainWindow(thread=thread,app=app, devhandler=devhandler, phoneInfo=phoneInfo, loglevel=loglevel)
 
     icon = QIcon()
     icon.addFile(path.get_images_path('logo_32.png'), QSize(32, 32))

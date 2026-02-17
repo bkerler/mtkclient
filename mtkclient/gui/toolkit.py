@@ -102,7 +102,7 @@ def convert_size(size_bytes):
 
 class asyncThread(QThread):
     sendToLogSignal = Signal(str)
-    sendUpdateSignal = Signal()
+    sendUpdateSignal = Signal(dict)
     sendToProgressSignal = Signal(object)
     update_status_text = Signal(str)
 
