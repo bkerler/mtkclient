@@ -349,7 +349,7 @@ class DALegacy(metaclass=LogBase):
                             lendram = len(self.daconfig.emi)
                             if hwcode != 0x8127:
                                 self.usbwrite(pack(">I", lendram))
-                        elif self.daconfig.emiver in [0x0B]:
+                        elif self.daconfig.emiver in [0x0A, 0x0B]:
                             info = self.usbread(0x10)  # 0x000000BC
                             self.info(f"RAM-Info: {hexlify(info).decode('utf-8')}")
                             dramlength = unpack(">I", self.usbread(0x4))[0]
