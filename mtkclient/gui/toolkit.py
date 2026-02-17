@@ -113,8 +113,13 @@ class asyncThread(QThread):
         self.function = function
 
     def run(self):
-        self.function(self, self.parameters)
-
+        try:
+            self.function(self, self.parameters)
+        except Exception as e:
+            self.sendToLogSignal.emit(f"Thread error: {str(e)}")
+        finally:
+            # Ensure proper cleanup
+            pass
 
 class FDialog:
     def __init__(self, parent):

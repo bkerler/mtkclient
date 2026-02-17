@@ -291,7 +291,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def updateState(self):
-        lock.acquire()
+        #lock.acquire()
         done_bytes = 0
         curpart_bytes = (
             self.Status)[f"currentPartitionSize{'Done' if 'currentPartitionSizeDone' in self.Status else ''}"]
@@ -333,7 +333,7 @@ class MainWindow(QMainWindow):
                    timeinfo + QCoreApplication.translate("main", " left") + "</td></tr></table>")
             self.ui.partProgressText.setText(txt)
 
-        lock.release()
+        #lock.release()
 
     def updateStateAsync(self, toolkit, parameters):
         while not self.Status["done"]:
@@ -679,10 +679,16 @@ def main():
     win.setdevhandler(devhandler)
 
     # Run loop the app
-    app.exec()
-    # Prevent thread from not being closed and call error end codes
-    thread.terminate()
-    thread.wait()
+    try:
+        app.exec()
+    finally:
+        # Prevent thread from not being closed and call error end codes
+        if thread.isRunning():
+            thread.quit()
+            thread.wait(1000)
+            if thread.isRunning():
+                thread.terminate()
+        thread.wait()
 
 
 if __name__ == '__main__':

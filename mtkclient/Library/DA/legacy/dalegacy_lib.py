@@ -879,15 +879,15 @@ class DALegacy(metaclass=LogBase):
     def upload_da(self):
         self.info("Uploading legacy da...")
         if self.upload_da1():
-            self.info(self.daconfig.legacy_storage.flashconfig)
+            self.info(repr(self.daconfig.legacy_storage.flashconfig))
             if self.daconfig.storage.flashtype == "emmc":
-                self.info(self.daconfig.legacy_storage.emmc)
+                self.info(repr(self.daconfig.legacy_storage.emmc))
             elif self.daconfig.storage.flashtype == "nand":
-                self.info(self.daconfig.legacy_storage.nand)
+                self.info(repr(self.daconfig.legacy_storage.nand))
             elif self.daconfig.storage.flashtype == "nor":
-                self.info(self.daconfig.legacy_storage.nor)
+                self.info(repr(self.daconfig.legacy_storage.nor))
             elif self.daconfig.storage.flashtype == "sdc":
-                self.info(self.daconfig.legacy_storage.sdc)
+                self.info(repr(self.daconfig.legacy_storage.sdc))
             return True
         return False
 
