@@ -798,6 +798,8 @@ class Sej(metaclass=LogBase):
         self.reg.HACC_AKEY7 = 0
 
     def SEJ_V3_Init(self, ben=True, iv=None, legacy=False):
+        if self.hwcode in [0x6795]:
+            legacy = False
         acon_setting = self.HACC_AES_CHG_BO_OFF | self.HACC_AES_128
         if iv is not None:
             acon_setting |= self.HACC_AES_CBC
@@ -821,10 +823,11 @@ class Sej(metaclass=LogBase):
 
         # init ACONK, bind HUID/HUK to HACC, this may differ
         # enable R2K, so that output data is feedback to key by HACC internal algorithm
-        self.reg.HACC_ACONK = self.HACC_AES_BK2C | self.HACC_AES_R2K  # 0x0C
+        self.reg.HACC_ACONK = self.HACC_AES_BK2C
+        self.reg.HACC_ACONK |= self.HACC_AES_R2K  # 0x110
 
         # clear HACC_ASRC/HACC_ACFG/HACC_AOUT
-        self.reg.HACC_ACON2 = self.HACC_AES_CLR  # 0x08
+        self.reg.HACC_ACON2 = self.HACC_AES_CLR  # 0x2
 
         self.reg.HACC_ACFG0 = iv[0]  # g_AC_CFG
         self.reg.HACC_ACFG1 = iv[1]
@@ -856,7 +859,7 @@ class Sej(metaclass=LogBase):
                 self.reg.HACC_ASRC1 = self.g_CFG_RANDOM_PATTERN[pos + 1]
                 self.reg.HACC_ASRC2 = self.g_CFG_RANDOM_PATTERN[pos + 2]
                 self.reg.HACC_ASRC3 = self.g_CFG_RANDOM_PATTERN[pos + 3]
-                self.reg.HACC_ACON2 = self.HACC_AES_START
+                self.reg.HACC_ACON2 = self.HACC_AES_START # 0x1
                 i = 0
                 while i < 20:
                     if self.reg.HACC_ACON2 & self.HACC_AES_RDY != 0:
