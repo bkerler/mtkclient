@@ -104,6 +104,8 @@ class DeviceClass(metaclass=LogBase):
     def rdword(self, count=1, little=False, direct=False):
         rev = "<" if little else ">"
         value = self.usbread(4 * count)
+        if value == b'':
+            return None
         if direct:
             return value
         data = unpack(rev + "I" * count, value)

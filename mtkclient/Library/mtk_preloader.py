@@ -171,22 +171,23 @@ class Preloader(metaclass=LogBase):
         if tries == 1000:
             return False
 
-        if self.config.iot:
+        if not self.echo(self.Cmd.GET_HW_CODE.value):  # 0xFD
+            if not self.echo(self.Cmd.GET_HW_CODE.value):
+                self.error("Sync error. Please power off the device and retry.")
+                self.config.set_gui_status(self.config.tr("Sync error. Please power off the device and retry."))
+            return False
+        val = self.rdword()
+        if val is None or self.config.iot:
             self.config.hwver = self.read_a2(0x80000000)
             self.config.hwcode = self.read_a2(0x80000008)
             self.config.hw_sub_code = self.read_a2(0x8000000C)
             self.config.swver = (self.read32(0xA01C0108) & 0xFFFF0000) >> 16
+            self.config.iot = True
+            self.info("Detected iot mode !")
         else:
-            if not self.echo(self.Cmd.GET_HW_CODE.value):  # 0xFD
-                if not self.echo(self.Cmd.GET_HW_CODE.value):
-                    self.error("Sync error. Please power off the device and retry.")
-                    self.config.set_gui_status(self.config.tr("Sync error. Please power off the device and retry."))
-                return False
-            else:
-                val = self.rdword()
-                self.config.hwcode = (val >> 16) & 0xFFFF
-                self.config.hwver = val & 0xFFFF
-                self.config.init_hwcode(self.config.hwcode)
+            self.config.hwcode = (val >> 16) & 0xFFFF
+            self.config.hwver = val & 0xFFFF
+            self.info("Detected regular mode !")
         self.config.init_hwcode(self.config.hwcode)
 
         cpu = self.config.chipconfig.name
@@ -264,7 +265,6 @@ class Preloader(metaclass=LogBase):
                 self.error(f"Couldn't find cert file {self.config.cert}")
         if self.config.iot:
             if self.config.hwcode == 0x6261:
-                self.config.internal_flash = True
                 RTC_BASE = 0xA0710000
                 PMU_BASE = 0xA0700000
                 EMI_REMAP = 0xA0510000
