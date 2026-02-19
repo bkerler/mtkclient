@@ -727,6 +727,10 @@ class DALegacy(metaclass=LogBase):
                                     if ack == b"Z":
                                         self.usbwrite(b"Z")
                                         self.cmd_nwdm_info()
+                                    else:
+                                        print("Didn't receive 2523 read flash ack")
+                                        sys.stdout.flush()
+                                        return False
                                 else:
                                     print("Bad chip setup")
                                     sys.stdout.flush()
@@ -1144,7 +1148,7 @@ class DALegacy(metaclass=LogBase):
             if ack is not self.Rsp.ACK[0]:
                 self.usbwrite(b"\xA5")
                 res = unpack("<I", self.usbread(4))[0]
-                self.error(f"Error on sending emmc read command, response: {hex(ack)}, status: {hex(res)}")
+                self.error(f"Error on sending emmc read flash command, response: {hex(ack)}, status: {hex(res)}")
                 exit(1)
             self.daconfig.readsize = self.daconfig.storage.flashsize
         elif self.daconfig.storage.flashtype == "nand":
@@ -1186,7 +1190,7 @@ class DALegacy(metaclass=LogBase):
             if ack is not self.Rsp.ACK[0]:
                 self.usbwrite(b"\xA5")
                 res = unpack("<I", self.usbread(4))[0]
-                self.error(f"Error on sending emmc read command, response: {hex(ack)}, status: {hex(res)}")
+                self.error(f"Error on sending nor readflash command, response: {hex(ack)}, status: {hex(res)}")
                 exit(1)
             self.daconfig.readsize = self.daconfig.storage.flashsize
         if filename != "":

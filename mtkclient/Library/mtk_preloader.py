@@ -274,7 +274,10 @@ class Preloader(metaclass=LogBase):
                 MR_FB0RB1 = 2  # Flash - Bank0, RAM - Bank1
                 MR_FB1RB0 = 3  # Flash - Bank1, RAM - Bank0
                 if self.config.swver == 0x35C0 and self.config.hw_sub_code == 0x8000:
-                    self.info("MTK 6261MA detected :)")
+                    if self.config.hwver == 0xcb01:
+                        self.info("MTK 6261DA detected :)")
+                    else:
+                        self.info("MTK 6261MA detected :)")
                     sys.stdout.flush()
                     self.write16(RGU_BASE, 0x2200)  # disable system wdg
                     self.write16(PMU_BASE + 0xa28, 0x8000)  # enter USB download
