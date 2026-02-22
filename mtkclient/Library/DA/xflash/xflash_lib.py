@@ -257,7 +257,7 @@ class DAXFlash(metaclass=LogBase):
                                 self.info("DRAM setup passed.")
                                 return True
                         except Exception as err:
-                            self.info(f"DRAM setup failed: {str(err)}")
+                            self.info(f"DRAM setup failed: {str(err)}. Use mtk.py with --preloader preloader.bin !")
                             return False
                 except Exception as err:
                     self.error(f"Error on sending emi: {str(err)}")
