@@ -431,9 +431,6 @@ class UsbClass(DeviceClass):
                         pos += ctr
                 except Exception as err:
                     self.debug(str(err))
-                    if 'No such device' in str(err):
-                        self.error(str(err))
-                        sys.exit(1)
                     # print("Error while writing")
                     # time.sleep(0.01)
                     i += 1
