@@ -89,9 +89,9 @@ class DAXFlash(metaclass=LogBase):
                 self.usbwrite(stmp)
             else: # needed for 0x6750, 0x6762, 0x6785, 0x6761
                 stmp = pack("<III", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4)
+                data = pack("<I", 0)
                 self.usbwrite(stmp)
-                stmp = pack("<I", 0)
-                self.usbwrite(stmp)
+                self.usbwrite(data)
             if rstatus:
                 status = self.status()
                 return status

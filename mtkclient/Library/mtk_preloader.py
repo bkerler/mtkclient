@@ -620,7 +620,6 @@ class Preloader(metaclass=LogBase):
                 # set external boot , remap control change to Bus
                 # Set MB0 to Bank0 and MB1 to Bank1
                 self.write32(0xA0510000, self.read32(0xA0510000, 1) | 2)
-                self.write32(0xA0510000, self.read32(0xA0510000, 1) | 2)
             else:
                 self.write16(0xA0030000, 0x2200)
             res = True
