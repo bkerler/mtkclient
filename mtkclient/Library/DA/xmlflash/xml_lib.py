@@ -615,7 +615,7 @@ class DAXML(metaclass=LogBase):
             self.hakujoudai = Hakujoudai(self.mtk, self.loglevel)
 
             if not self.mtk.daloader.patch and not self.mtk.config.stock:
-                if self.mtk.config.target_config["sbc"] and self.carbonara.check_for_carbonara_patched(self.daconfig.da1):
+                if self.mtk.config.target_config["sbc"] and not self.carbonara.check_for_carbonara_patched(self.daconfig.da1):
                     loaded = self.carbonara.patchda1_and_upload_da2()
                     if loaded:
                         self.mtk.daloader.patch = True
