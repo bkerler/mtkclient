@@ -6,6 +6,7 @@ from struct import unpack, pack
 
 from Cryptodome.Cipher import AES
 
+from mtkclient.Library.Exploit.exptools.aarch_tools import Aarch64Tools
 from mtkclient.Library.Hardware.hwcrypto_sej import sej_cryptmode
 from mtkclient.Library.mtk_crypto import verify_checksum, nvram_keys, SST_Get_NVRAM_SW_Key
 # from keystone import *
@@ -57,8 +58,72 @@ class XmlFlashExt(metaclass=LogBase):
         self.da2address = self.xflash.daconfig.da_loader.region[2].m_start_addr  # at_address
         data = bytearray(_da2)
         idx = data.find(b"\x00CMD:SET-HOST-INFO\x00")
+        if idx == -1:
+            return None
         base = self.da2address
-        if idx != -1:
+        entry = int.from_bytes(_da2[4:8], byteorder='little')
+        if entry & 0xF0 == 0xC0:
+            self.is_arm64 = True
+        else:
+            self.is_arm64 = False
+
+        if self.is_arm64:
+            at = Aarch64Tools(_da2, self.da2address)
+            ref_offset = at.find_string_xref("CMD:SET-HOST-INFO")
+            if ref_offset is None:
+                print("Error finding CMD:SET-HOST-INFO")
+                return None
+            bl_offset = at.get_next_bl_from_off(ref_offset)
+            if bl_offset is None:
+                print("Error finding xml_register_cmd")
+                return None
+            cmd_set_host = at.resolve_register_value_back(bl_offset, reg=2, lookback=5)
+            if cmd_set_host is None:
+                print("Error finding cmd_set_host_info")
+                return None
+            cmd_set_host_offset = cmd_set_host - self.da2address
+            # Patch CMD:SET-HOST-INFO to point to our loader
+            newcmd = b"CMD:CUSTOM\x00"
+            data[idx + 1: idx + 1 + len(newcmd)] = newcmd
+            # Now patch the existing SET-HOST-INFO command
+            # ks = Ks(KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN)
+            content = """
+            STP             X29, X30, [SP,#-0x30]!
+            STR             X21, [SP,#0x10]
+            MOV             X29, SP
+            STP             X20, X19, [SP,#0x20]
+            MOV             X19, X1
+            MOV             X8,  X0
+
+            ADRP            X0, #0x6800F000
+            MOV             X1, #4
+            LDR             X2, [X8]
+            BR              X2
+
+            ADRP            X0, #0x68000000
+            ADRP            X1, #0x6800F000
+            LDR             X2, [X8]
+            BR              X2
+
+            ADRP            X0, #0x68000000
+            BR              X0
+
+            MOV             W0, WZR
+            LDP             X20, X19, [SP,#0x20]
+            LDR             X21, [SP,#0x10]
+            LDP             X29, X30, [SP],#0x30
+            RET
+            """
+            _ = content
+            # encoding, length = ks.asm(content, addr=cmd_set_host)
+            # newdata = b"".join(int.to_bytes(val, 1, 'little') for val in encoding)
+            # print(newdata.hex())
+            newdata = bytes.fromhex(
+                "fd7bbda9f50b00f9fd030091f44f02a9f30301aae80300aa60001490810080d2020140f940001fd6e0ff13b061001490020140f940001fd6e0ff13b000001fd6e0031f2af44f42a9f50b40f9fd7bc3a8c0035fd6")
+            sys.stdout.flush()
+            data[cmd_set_host_offset:cmd_set_host_offset + len(newdata)] = newdata
+            return data
+        else:
             first_op, second_op = offset_to_op_mov(idx + 1, 0, base)
             first_op = int.to_bytes(first_op, 4, 'little')
             second_op = int.to_bytes(second_op, 4, 'little')
@@ -109,7 +174,7 @@ class XmlFlashExt(metaclass=LogBase):
                 newcmd = b"CMD:CUSTOM\x00"
                 data[idx + 1:idx + 1 + len(newcmd)] = newcmd
                 return data
-        return _da2
+        return None
 
     def ack(self):
         xmlcmd = self.xflash.cmd.create_cmd("CUSTOMACK")
