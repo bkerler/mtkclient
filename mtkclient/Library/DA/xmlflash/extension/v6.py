@@ -2,13 +2,14 @@ import hashlib
 import logging
 import os
 import sys
+import json
 from struct import unpack, pack
-
 from Cryptodome.Cipher import AES
+# from keystone.keystone import Ks
+# from keystone.keystone_const import KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN
 
 from mtkclient.Library.Hardware.hwcrypto_sej import sej_cryptmode
 from mtkclient.Library.mtk_crypto import verify_checksum, nvram_keys, SST_Get_NVRAM_SW_Key
-# from keystone import *
 from mtkclient.config.payloads import PathConfig
 from mtkclient.config.brom_config import Efuse
 from mtkclient.Library.error import ErrorHandler
@@ -17,7 +18,7 @@ from mtkclient.Library.utils import find_binary, do_tcp_keyserver
 from mtkclient.Library.gui_utils import LogBase, progress, logsetup
 from mtkclient.Library.Hardware.seccfg import SecCfgV3, SecCfgV4
 from mtkclient.Library.utils import MTKTee
-import json
+from mtkclient.Library.Exploit.exptools.aarch_tools import Aarch64Tools
 
 rpmb_error = [
     "",
@@ -57,8 +58,73 @@ class XmlFlashExt(metaclass=LogBase):
         self.da2address = self.xflash.daconfig.da_loader.region[2].m_start_addr  # at_address
         data = bytearray(_da2)
         idx = data.find(b"\x00CMD:SET-HOST-INFO\x00")
+        if idx == -1:
+            return None
         base = self.da2address
-        if idx != -1:
+        entry = int.from_bytes(_da2[4:8], byteorder='little')
+        if entry & 0xF0 == 0xC0:
+            self.is_arm64 = True
+        else:
+            self.is_arm64 = False
+
+        if self.is_arm64:
+            at = Aarch64Tools(_da2, self.da2address)
+            ref_offset = at.find_string_xref("CMD:SET-HOST-INFO")
+            if ref_offset is None:
+                print("Error finding CMD:SET-HOST-INFO")
+                return None
+            bl_offset = at.get_next_bl_from_off(ref_offset)
+            if bl_offset is None:
+                print("Error finding xml_register_cmd")
+                return None
+            cmd_set_host = at.resolve_register_value_back(bl_offset, reg=2, lookback=5)
+            if cmd_set_host is None:
+                print("Error finding cmd_set_host_info")
+                return None
+            cmd_set_host_offset = cmd_set_host - self.da2address
+            # Patch CMD:SET-HOST-INFO to point to our loader
+            newcmd = b"CMD:CUSTOM\x00"
+            data[idx + 1: idx + 1 + len(newcmd)] = newcmd
+            # Now patch the existing SET-HOST-INFO command
+            # ks = Ks(KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN)
+            content = """
+            STP             X29, X30, [SP,#-0x30]!
+            STR             X21, [SP,#0x10]
+            MOV             X29, SP
+            STP             X20, X19, [SP,#0x20]
+            MOV             X19, X0
+            LDR             X21, [X19]
+            # Receive length 4 bytes
+            ADRP            X0, #0x68000000
+            ADD             X0, X0, #0xF000
+            MOV             X1, #4
+            BLR             X21
+            # Receive data
+            ADRP            X0, #0x68000000
+            MOV             X1, X0
+            ADD             X1, X1, #0xF000
+            LDR             X1, [X1]
+            BLR             X21
+            # Jump to payload
+            ADRP            X0, #0x68000000
+            BLR             X0
+
+            MOV             W0, WZR
+            LDP             X20, X19, [SP,#0x20]
+            LDR             X21, [SP,#0x10]
+            LDP             X29, X30, [SP],#0x30
+            RET
+            """
+            _ = content
+            # encoding, length = ks.asm(content, addr=cmd_set_host)
+            # newdata = b"".join(int.to_bytes(val, 1, 'little') for val in encoding)
+            # print(newdata.hex())
+            newdata = bytes.fromhex(
+                "fd7bbda9f50b00f9fd030091f44f02a9f30300aa750240f9e0ff13b0003c4091810080d2a0023fd6e0ff13b0e10300aa213c4091210040f9a0023fd6e0ff13b000003fd6e0031f2af44f42a9f50b40f9fd7bc3a8c0035fd6")
+            sys.stdout.flush()
+            data[cmd_set_host_offset:cmd_set_host_offset + len(newdata)] = newdata
+            return data
+        else:
             first_op, second_op = offset_to_op_mov(idx + 1, 0, base)
             first_op = int.to_bytes(first_op, 4, 'little')
             second_op = int.to_bytes(second_op, 4, 'little')
@@ -98,17 +164,17 @@ class XmlFlashExt(metaclass=LogBase):
 
                 POP             {R4-R6,R10,R11,PC}
                 """
-                # encoding, length = ks.asm(content, addr=addr)
-                # newdata = b"".join(int.to_bytes(val, 1, 'little') for val in encoding)
+            # encoding, length = ks.asm(content, addr=addr)
+            # newdata = b"".join(int.to_bytes(val, 1, 'little') for val in encoding)
 
-                newdata = bytes.fromhex(
-                    "704c2de910b08de20080a0e100000fe3000846e30410a0e3002098e532ff2fe100000fe3000846e3000000e3000846e3" +
-                    "002098e532ff2fe1000000e3000846e330ff2fe1708cbde8")
-                sys.stdout.flush()
-                data[addr:addr + len(newdata)] = newdata
-                newcmd = b"CMD:CUSTOM\x00"
-                data[idx + 1:idx + 1 + len(newcmd)] = newcmd
-                return data
+            newdata = bytes.fromhex(
+                "704c2de910b08de20080a0e100000fe3000846e30410a0e3002098e532ff2fe100000fe3000846e3000000e3000846e3" +
+                "002098e532ff2fe1000000e3000846e330ff2fe1708cbde8")
+            sys.stdout.flush()
+            data[addr:addr + len(newdata)] = newdata
+            newcmd = b"CMD:CUSTOM\x00"
+            data[idx + 1:idx + 1 + len(newcmd)] = newcmd
+            return data
         return _da2
 
     def ack(self):
@@ -134,88 +200,169 @@ class XmlFlashExt(metaclass=LogBase):
     def patch(self):
         self.da2 = self.xflash.daconfig.da2
         self.da2address = self.xflash.daconfig.da_loader.region[2].m_start_addr  # at_address
-        daextensions = os.path.join(self.pathconfig.get_payloads_path(), "da_xml.bin")
+        base = self.da2address
+        entry = int.from_bytes(self.da2[4:8], byteorder='little')
+        if entry & 0xF0 == 0xC0:
+            self.is_arm64 = True
+        else:
+            self.is_arm64 = False
+
+        if self.is_arm64:
+            daextensions = os.path.join(self.pathconfig.get_payloads_path(), "da_xml_64.bin")
+        else:
+            daextensions = os.path.join(self.pathconfig.get_payloads_path(), "da_xml.bin")
+
         if os.path.exists(daextensions):
             daextdata = bytearray(open(daextensions, "rb").read())
-            register_ptr = daextdata.find(b"\x11\x11\x11\x11")
-            mmc_get_card_ptr = daextdata.find(b"\x22\x22\x22\x22")
-            mmc_set_part_config_ptr = daextdata.find(b"\x33\x33\x33\x33")
-            mmc_rpmb_send_command_ptr = daextdata.find(b"\x44\x44\x44\x44")
-            ufshcd_queuecommand_ptr = daextdata.find(b"\x55\x55\x55\x55")
-            ufshcd_get_free_tag_ptr = daextdata.find(b"\x66\x66\x66\x66")
-            ptr_g_ufs_hba_ptr = daextdata.find(b"\x77\x77\x77\x77")
-            efuse_addr_ptr = daextdata.find(b"\x88\x88\x88\x88")
 
-            # register_xml_cmd("CMD:GET-SYS-PROPERTY", & a1, cmd_get_sys_property);
+            if self.is_arm64:
+                register_ptr = daextdata.find(b"\x11\x11\x11\x11")
+                mmc_get_card_ptr = daextdata.find(b"\x22\x22\x22\x22\x22\x22\x22\x22")
+                mmc_set_part_config_ptr = daextdata.find(b"\x33\x33\x33\x33\x33\x33\x33\x33")
+                mmc_rpmb_send_command_ptr = daextdata.find(b"\x44\x44\x44\x44\x44\x44\x44\x44")
+                ufshcd_queuecommand_ptr = daextdata.find(b"\x55\x55\x55\x55\x55\x55\x55\x55")
+                ufshcd_get_free_tag_ptr = daextdata.find(b"\x66\x66\x66\x66\x66\x66\x66\x66")
+                ptr_g_ufs_hba_ptr = daextdata.find(b"\x77\x77\x77\x77\x77\x77\x77\x77")
+                efuse_addr_ptr = daextdata.find(b"\x88\x88\x88\x88")
 
-            # open("out" + hex(self.da2address) + ".da", "wb").write(da2)
-            register_xml_cmd = find_binary(self.da2,
-                                           b"\x70\x4C\x2D\xE9\x10\xB0\x8D\xE2\x00\x50\xA0\xE1\x14\x00\xA0\xE3")
-
-            # UFS
-            idx = self.da2.find(b"\x00\x00\x94\xE5\x34\x10\x90\xE5\x01\x00\x11\xE3\x03\x00\x00\x0A")
-            g_ufs_hba = 0
-            ufshcd_queuecommand = 0
-            ufshcd_get_free_tag = 0
-            if idx != -1:
-                instr1 = int.from_bytes(self.da2[idx - 0x8:idx - 0x4], 'little')
-                instr2 = int.from_bytes(self.da2[idx - 0x4:idx], 'little')
-                g_ufs_hba = op_mov_to_offset(instr1, instr2, 4)
-                ufshcd_queuecommand = find_binary(self.da2,b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\x08\xD0\x4D\xE2\x48\x40\x90\xE5")
+                register_xml_cmd = find_binary(self.da2,
+                                               b"\xFD\x7B\xBD\xA9\xF5\x0B\x00\xF9\xFD\x03\x00\x91\xF4\x4F\x02\xA9\xF5\x03\x00\xAA\x00\x05\x80\x52")
+                # UFS
+                ar = Aarch64Tools(self.da2, self.da2address)
+                ufs_controller_enable_offset = ar.find_function_from_string("Controller enable failed\n")
+                instr = int.from_bytes(self.da2[ufs_controller_enable_offset + 0xC:ufs_controller_enable_offset + 0x10],
+                                       'little')
+                g_ufs_hba = ar.decode_adrp(instr, ufs_controller_enable_offset + 0xC + self.da2address)[0]
+                ufshcd_queuecommand = 0
+                ufshcd_get_free_tag = 0
+                ufshcd_queuecommand = find_binary(self.da2,
+                                                  b"\xFD\x7B\xBC\xA9\xF7\x0B\x00\xF9\xFD\x03\x00\x91\xF6\x57\x02\xA9\xF4\x4F\x03\xA9\x14\x34\x40\xF9\xF5\x03\x01\xAA")
                 if ufshcd_queuecommand is None:
-                    ufshcd_queuecommand = find_binary(self.da2,
-                                                      b"\xF0\x4F\x2D\xE9\x1C\xB0\x8D\xE2\x0C\xD0\x4D\xE2\x48\xA0\x90\xE5\x00\x80\xA0\xE1")
-                    if ufshcd_queuecommand is None:
-                        ufshcd_queuecommand = 0
-                    else:
-                        ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
+                    ufshcd_queuecommand = 0
                 else:
                     ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
 
-                ufshcd_get_free_tag = find_binary(self.da2,
-                                                  b"\x10\x4C\x2D\xE9\x08\xB0\x8D\xE2\x00\x40\xA0\xE3\x00\x00\x51\xE3")
+                ufshcd_get_free_tag = ar.find_function_from_string("[UFS] ufshcd_get_free_tag fail\n")
                 if ufshcd_get_free_tag is None:
                     ufshcd_get_free_tag = 0
                 else:
                     ufshcd_get_free_tag = ufshcd_get_free_tag + self.da2address
 
-            # EMMC
-
-            mmc_get_card = find_binary(self.da2, b"\x90\x12\x20\xE0\x1E\xFF\x2F\xE1")
-            if mmc_get_card is not None:
-                mmc_get_card -= 0xC
-            else:
-                mmc_get_card = 0
-
-            mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x23\xDE\x4D\xE2")
-            if mmc_set_part_config is None:
-                mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x8E\xDF\x4D\xE2")
+                # EMMC
+                mmc_switch_part_offset = ar.find_function_from_string("mmc_switch_part")
+                mmc_get_card_ptr2 = ar.get_next_bl_from_off(mmc_switch_part_offset)
+                mmc_get_card = ar.get_bl_target(mmc_get_card_ptr2)
+                mmc_set_part_config = find_binary(self.da2, b"\x08\x80\x40\x39\x88\x00\x08\x37\x08\xB4\x49\x39")
                 if mmc_set_part_config is None:
                     mmc_set_part_config = 0
 
-            mmc_rpmb_send_command = find_binary(self.da2, b"\xF0\x48\x2D\xE9\x10\xB0\x8D\xE2\x08\x70\x9B\xE5")
-            if mmc_rpmb_send_command is None:
-                mmc_rpmb_send_command = 0
+                mmc_rpmb_offs = ar.find_function_from_string("%sreq/1 fail %d\n")
+                logl = ar.get_next_bl_from_off(mmc_rpmb_offs)
+                mmc_rpmb_send_command_ptr2 = ar.get_next_bl_from_off(logl + 0x8)
+                mmc_rpmb_send_command = ar.get_bl_target(mmc_rpmb_send_command_ptr2)
+                if mmc_rpmb_send_command is None:
+                    mmc_rpmb_send_command = 0
+            else:
+                register_ptr = daextdata.find(b"\x11\x11\x11\x11")
+                mmc_get_card_ptr = daextdata.find(b"\x22\x22\x22\x22")
+                mmc_set_part_config_ptr = daextdata.find(b"\x33\x33\x33\x33")
+                mmc_rpmb_send_command_ptr = daextdata.find(b"\x44\x44\x44\x44")
+                ufshcd_queuecommand_ptr = daextdata.find(b"\x55\x55\x55\x55")
+                ufshcd_get_free_tag_ptr = daextdata.find(b"\x66\x66\x66\x66")
+                ptr_g_ufs_hba_ptr = daextdata.find(b"\x77\x77\x77\x77")
+                efuse_addr_ptr = daextdata.find(b"\x88\x88\x88\x88")
+
+                # 32bit
+                # register_xml_cmd("CMD:GET-SYS-PROPERTY", & a1, cmd_get_sys_property);
+
+                # open("out" + hex(self.da2address) + ".da", "wb").write(da2)
+                register_xml_cmd = find_binary(self.da2,
+                                               b"\x70\x4C\x2D\xE9\x10\xB0\x8D\xE2\x00\x50\xA0\xE1\x14\x00\xA0\xE3")
+
+                # UFS
+                idx = self.da2.find(b"\x00\x00\x94\xE5\x34\x10\x90\xE5\x01\x00\x11\xE3\x03\x00\x00\x0A")
+                g_ufs_hba = 0
+                ufshcd_queuecommand = 0
+                ufshcd_get_free_tag = 0
+                if idx != -1:
+                    instr1 = int.from_bytes(self.da2[idx - 0x8:idx - 0x4], 'little')
+                    instr2 = int.from_bytes(self.da2[idx - 0x4:idx], 'little')
+                    g_ufs_hba = op_mov_to_offset(instr1, instr2, 4)
+                    ufshcd_queuecommand = find_binary(self.da2,
+                                                      b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\x08\xD0\x4D\xE2\x48\x40\x90\xE5")
+                    if ufshcd_queuecommand is None:
+                        ufshcd_queuecommand = find_binary(self.da2,
+                                                          b"\xF0\x4F\x2D\xE9\x1C\xB0\x8D\xE2\x0C\xD0\x4D\xE2\x48\xA0\x90\xE5\x00\x80\xA0\xE1")
+                        if ufshcd_queuecommand is None:
+                            ufshcd_queuecommand = 0
+                        else:
+                            ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
+                    else:
+                        ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
+
+                    ufshcd_get_free_tag = find_binary(self.da2,
+                                                      b"\x10\x4C\x2D\xE9\x08\xB0\x8D\xE2\x00\x40\xA0\xE3\x00\x00\x51\xE3")
+                    if ufshcd_get_free_tag is None:
+                        ufshcd_get_free_tag = 0
+                    else:
+                        ufshcd_get_free_tag = ufshcd_get_free_tag + self.da2address
+
+                # EMMC
+                mmc_get_card = find_binary(self.da2, b"\x90\x12\x20\xE0\x1E\xFF\x2F\xE1")
+                if mmc_get_card is not None:
+                    mmc_get_card -= 0xC
+                else:
+                    mmc_get_card = 0
+
+                mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x23\xDE\x4D\xE2")
+                if mmc_set_part_config is None:
+                    mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x8E\xDF\x4D\xE2")
+                    if mmc_set_part_config is None:
+                        mmc_set_part_config = 0
+
+                mmc_rpmb_send_command = find_binary(self.da2, b"\xF0\x48\x2D\xE9\x10\xB0\x8D\xE2\x08\x70\x9B\xE5")
+                if mmc_rpmb_send_command is None:
+                    mmc_rpmb_send_command = 0
 
             efuse_addr = self.config.chipconfig.efuse_addr
-            #########################################
             if register_ptr != -1:
                 if register_xml_cmd:
                     register_xml_cmd = register_xml_cmd + self.da2address
                 else:
                     register_xml_cmd = 0
 
-                # Patch the addr
-                daextdata[register_ptr:register_ptr + 4] = pack("<I", register_xml_cmd)
-                daextdata[mmc_get_card_ptr:mmc_get_card_ptr + 4] = pack("<I", mmc_get_card)
-                daextdata[mmc_set_part_config_ptr:mmc_set_part_config_ptr + 4] = pack("<I", mmc_set_part_config)
-                daextdata[mmc_rpmb_send_command_ptr:mmc_rpmb_send_command_ptr + 4] = pack("<I", mmc_rpmb_send_command)
-                daextdata[ufshcd_get_free_tag_ptr:ufshcd_get_free_tag_ptr + 4] = pack("<I", ufshcd_get_free_tag)
-                daextdata[ufshcd_queuecommand_ptr:ufshcd_queuecommand_ptr + 4] = pack("<I", ufshcd_queuecommand)
-                daextdata[ptr_g_ufs_hba_ptr:ptr_g_ufs_hba_ptr + 4] = pack("<I", g_ufs_hba)
-                if efuse_addr_ptr != -1 and efuse_addr is not None:
-                    daextdata[efuse_addr_ptr:efuse_addr_ptr + 4] = pack("<I", efuse_addr)
-
+                length = 4
+                if self.is_arm64:
+                    # Patch the addr
+                    length = 8
+                    daextdata[register_ptr:register_ptr + 4] = pack("<I", register_xml_cmd)
+                    daextdata[mmc_get_card_ptr:mmc_get_card_ptr + length] = pack("<Q", mmc_get_card)
+                    daextdata[mmc_set_part_config_ptr:mmc_set_part_config_ptr + length] = pack("<Q",
+                                                                                               mmc_set_part_config)
+                    daextdata[mmc_rpmb_send_command_ptr:mmc_rpmb_send_command_ptr + length] = pack("<Q",
+                                                                                                   mmc_rpmb_send_command)
+                    daextdata[ufshcd_get_free_tag_ptr:ufshcd_get_free_tag_ptr + length] = pack("<Q",
+                                                                                               ufshcd_get_free_tag)
+                    daextdata[ufshcd_queuecommand_ptr:ufshcd_queuecommand_ptr + length] = pack("<Q",
+                                                                                               ufshcd_queuecommand)
+                    daextdata[ptr_g_ufs_hba_ptr:ptr_g_ufs_hba_ptr + length] = pack("<Q", g_ufs_hba)
+                    if efuse_addr_ptr != -1 and efuse_addr is not None:
+                        daextdata[efuse_addr_ptr:efuse_addr_ptr + 4] = pack("<I", efuse_addr)
+                else:
+                    length = 4
+                    daextdata[register_ptr:register_ptr + length] = pack("<I", register_xml_cmd)
+                    daextdata[mmc_get_card_ptr:mmc_get_card_ptr + length] = pack("<I", mmc_get_card)
+                    daextdata[mmc_set_part_config_ptr:mmc_set_part_config_ptr + length] = pack("<I",
+                                                                                               mmc_set_part_config)
+                    daextdata[mmc_rpmb_send_command_ptr:mmc_rpmb_send_command_ptr + length] = pack("<I",
+                                                                                                   mmc_rpmb_send_command)
+                    daextdata[ufshcd_get_free_tag_ptr:ufshcd_get_free_tag_ptr + length] = pack("<I",
+                                                                                               ufshcd_get_free_tag)
+                    daextdata[ufshcd_queuecommand_ptr:ufshcd_queuecommand_ptr + length] = pack("<I",
+                                                                                               ufshcd_queuecommand)
+                    daextdata[ptr_g_ufs_hba_ptr:ptr_g_ufs_hba_ptr + length] = pack("<I", g_ufs_hba)
+                    if efuse_addr_ptr != -1 and efuse_addr is not None:
+                        daextdata[efuse_addr_ptr:efuse_addr_ptr + length] = pack("<I", efuse_addr)
                 # print(hexlify(daextdata).decode('utf-8'))
                 # open("daext.bin","wb").write(daextdata)
                 return daextdata
@@ -249,7 +396,8 @@ class XmlFlashExt(metaclass=LogBase):
                 patched = True
         if not patched:
             # TCL 50 5G
-            idx = find_binary(_da2,b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1")
+            idx = find_binary(_da2,
+                              b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1")
             if idx is not None:
                 da2patched[idx:idx + 0x18] = (
                     b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1")
@@ -958,7 +1106,7 @@ class XmlFlashExt(metaclass=LogBase):
                     cryptmode = sej_cryptmode.HW_ENCRYPTED
                     status, ddata = self.custom_sej_hw(encrypt=encrypt,
                                                        data=data[0x40 + (x * nvitemsize):0x40 + (x * nvitemsize) +
-                                                                 nvitemsize],
+                                                                                         nvitemsize],
                                                        cryptmode=cryptmode, swcrypt=swcrypt, otp=otp, seed=seed,
                                                        aeskey=aeskey)
                     # ddata = self.protect(ddata)
@@ -1219,3 +1367,5 @@ def op_mov_to_offset(first_op, second_op, register):
     if reglo == reghi == register:
         return hi | lo
     return None
+
+
