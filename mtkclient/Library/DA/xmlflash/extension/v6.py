@@ -214,16 +214,17 @@ class XmlFlashExt(metaclass=LogBase):
 
         if os.path.exists(daextensions):
             daextdata = bytearray(open(daextensions, "rb").read())
-            register_ptr = daextdata.find(b"\x11\x11\x11\x11")
-            mmc_get_card_ptr = daextdata.find(b"\x22\x22\x22\x22")
-            mmc_set_part_config_ptr = daextdata.find(b"\x33\x33\x33\x33")
-            mmc_rpmb_send_command_ptr = daextdata.find(b"\x44\x44\x44\x44")
-            ufshcd_queuecommand_ptr = daextdata.find(b"\x55\x55\x55\x55")
-            ufshcd_get_free_tag_ptr = daextdata.find(b"\x66\x66\x66\x66")
-            ptr_g_ufs_hba_ptr = daextdata.find(b"\x77\x77\x77\x77")
-            efuse_addr_ptr = daextdata.find(b"\x88\x88\x88\x88")
 
             if self.is_arm64:
+                register_ptr = daextdata.find(b"\x11\x11\x11\x11")
+                mmc_get_card_ptr = daextdata.find(b"\x22\x22\x22\x22\x22\x22\x22\x22")
+                mmc_set_part_config_ptr = daextdata.find(b"\x33\x33\x33\x33\x33\x33\x33\x33")
+                mmc_rpmb_send_command_ptr = daextdata.find(b"\x44\x44\x44\x44\x44\x44\x44\x44")
+                ufshcd_queuecommand_ptr = daextdata.find(b"\x55\x55\x55\x55\x55\x55\x55\x55")
+                ufshcd_get_free_tag_ptr = daextdata.find(b"\x66\x66\x66\x66\x66\x66\x66\x66")
+                ptr_g_ufs_hba_ptr = daextdata.find(b"\x77\x77\x77\x77\x77\x77\x77\x77")
+                efuse_addr_ptr = daextdata.find(b"\x88\x88\x88\x88")
+
                 register_xml_cmd = find_binary(self.da2,
                                                b"\xFD\x7B\xBD\xA9\xF5\x0B\x00\xF9\xFD\x03\x00\x91\xF4\x4F\x02\xA9\xF5\x03\x00\xAA\x00\x05\x80\x52")
                 # UFS
@@ -249,19 +250,28 @@ class XmlFlashExt(metaclass=LogBase):
 
                 # EMMC
                 mmc_switch_part_offset = ar.find_function_from_string("mmc_switch_part")
-                mmc_get_card_ptr = ar.get_next_bl_from_off(mmc_switch_part_offset)
-                mmc_get_card = ar.get_bl_target(mmc_get_card_ptr)
+                mmc_get_card_ptr2 = ar.get_next_bl_from_off(mmc_switch_part_offset)
+                mmc_get_card = ar.get_bl_target(mmc_get_card_ptr2)
                 mmc_set_part_config = find_binary(self.da2, b"\x08\x80\x40\x39\x88\x00\x08\x37\x08\xB4\x49\x39")
                 if mmc_set_part_config is None:
                     mmc_set_part_config = 0
 
                 mmc_rpmb_offs = ar.find_function_from_string("%sreq/1 fail %d\n")
                 logl = ar.get_next_bl_from_off(mmc_rpmb_offs)
-                mmc_rpmb_send_command_ptr = ar.get_next_bl_from_off(logl + 0x8)
-                mmc_rpmb_send_command = ar.get_bl_target(mmc_rpmb_send_command_ptr)
+                mmc_rpmb_send_command_ptr2 = ar.get_next_bl_from_off(logl + 0x8)
+                mmc_rpmb_send_command = ar.get_bl_target(mmc_rpmb_send_command_ptr2)
                 if mmc_rpmb_send_command is None:
                     mmc_rpmb_send_command = 0
             else:
+                register_ptr = daextdata.find(b"\x11\x11\x11\x11")
+                mmc_get_card_ptr = daextdata.find(b"\x22\x22\x22\x22")
+                mmc_set_part_config_ptr = daextdata.find(b"\x33\x33\x33\x33")
+                mmc_rpmb_send_command_ptr = daextdata.find(b"\x44\x44\x44\x44")
+                ufshcd_queuecommand_ptr = daextdata.find(b"\x55\x55\x55\x55")
+                ufshcd_get_free_tag_ptr = daextdata.find(b"\x66\x66\x66\x66")
+                ptr_g_ufs_hba_ptr = daextdata.find(b"\x77\x77\x77\x77")
+                efuse_addr_ptr = daextdata.find(b"\x88\x88\x88\x88")
+
                 # 32bit
                 # register_xml_cmd("CMD:GET-SYS-PROPERTY", & a1, cmd_get_sys_property);
 
@@ -321,17 +331,38 @@ class XmlFlashExt(metaclass=LogBase):
                 else:
                     register_xml_cmd = 0
 
-                # Patch the addr
-                daextdata[register_ptr:register_ptr + 4] = pack("<I", register_xml_cmd)
-                daextdata[mmc_get_card_ptr:mmc_get_card_ptr + 4] = pack("<I", mmc_get_card)
-                daextdata[mmc_set_part_config_ptr:mmc_set_part_config_ptr + 4] = pack("<I", mmc_set_part_config)
-                daextdata[mmc_rpmb_send_command_ptr:mmc_rpmb_send_command_ptr + 4] = pack("<I", mmc_rpmb_send_command)
-                daextdata[ufshcd_get_free_tag_ptr:ufshcd_get_free_tag_ptr + 4] = pack("<I", ufshcd_get_free_tag)
-                daextdata[ufshcd_queuecommand_ptr:ufshcd_queuecommand_ptr + 4] = pack("<I", ufshcd_queuecommand)
-                daextdata[ptr_g_ufs_hba_ptr:ptr_g_ufs_hba_ptr + 4] = pack("<I", g_ufs_hba)
-                if efuse_addr_ptr != -1 and efuse_addr is not None:
-                    daextdata[efuse_addr_ptr:efuse_addr_ptr + 4] = pack("<I", efuse_addr)
-
+                length = 4
+                if self.is_arm64:
+                    # Patch the addr
+                    length = 8
+                    daextdata[register_ptr:register_ptr + 4] = pack("<I", register_xml_cmd)
+                    daextdata[mmc_get_card_ptr:mmc_get_card_ptr + length] = pack("<Q", mmc_get_card)
+                    daextdata[mmc_set_part_config_ptr:mmc_set_part_config_ptr + length] = pack("<Q",
+                                                                                               mmc_set_part_config)
+                    daextdata[mmc_rpmb_send_command_ptr:mmc_rpmb_send_command_ptr + length] = pack("<Q",
+                                                                                                   mmc_rpmb_send_command)
+                    daextdata[ufshcd_get_free_tag_ptr:ufshcd_get_free_tag_ptr + length] = pack("<Q",
+                                                                                               ufshcd_get_free_tag)
+                    daextdata[ufshcd_queuecommand_ptr:ufshcd_queuecommand_ptr + length] = pack("<Q",
+                                                                                               ufshcd_queuecommand)
+                    daextdata[ptr_g_ufs_hba_ptr:ptr_g_ufs_hba_ptr + length] = pack("<Q", g_ufs_hba)
+                    if efuse_addr_ptr != -1 and efuse_addr is not None:
+                        daextdata[efuse_addr_ptr:efuse_addr_ptr + 4] = pack("<I", efuse_addr)
+                else:
+                    length = 4
+                    daextdata[register_ptr:register_ptr + length] = pack("<I", register_xml_cmd)
+                    daextdata[mmc_get_card_ptr:mmc_get_card_ptr + length] = pack("<I", mmc_get_card)
+                    daextdata[mmc_set_part_config_ptr:mmc_set_part_config_ptr + length] = pack("<I",
+                                                                                               mmc_set_part_config)
+                    daextdata[mmc_rpmb_send_command_ptr:mmc_rpmb_send_command_ptr + length] = pack("<I",
+                                                                                                   mmc_rpmb_send_command)
+                    daextdata[ufshcd_get_free_tag_ptr:ufshcd_get_free_tag_ptr + length] = pack("<I",
+                                                                                               ufshcd_get_free_tag)
+                    daextdata[ufshcd_queuecommand_ptr:ufshcd_queuecommand_ptr + length] = pack("<I",
+                                                                                               ufshcd_queuecommand)
+                    daextdata[ptr_g_ufs_hba_ptr:ptr_g_ufs_hba_ptr + length] = pack("<I", g_ufs_hba)
+                    if efuse_addr_ptr != -1 and efuse_addr is not None:
+                        daextdata[efuse_addr_ptr:efuse_addr_ptr + length] = pack("<I", efuse_addr)
                 # print(hexlify(daextdata).decode('utf-8'))
                 # open("daext.bin","wb").write(daextdata)
                 return daextdata
@@ -1337,64 +1368,4 @@ def op_mov_to_offset(first_op, second_op, register):
         return hi | lo
     return None
 
-
-if __name__ == "__main__":
-    """
-    da2 = open(
-        "/home/bjk/Projects/mtkclient_le/Loaders/V6/motorola/mt6855_moto_g54_cancunf/loaders/1129_40000000DA_BR.bin",
-        "rb").read()
-    da1 = open(
-        "/home/bjk/Projects/mtkclient_le/Loaders/V6/motorola/mt6855_moto_g54_cancunf/loaders/1129_2000000DA_BR.bin",
-        "rb").read()
-    """
-    from mtkclient.Library.mtk_class import Mtk
-    from mtkclient.config.mtk_config import MtkConfig
-    from mtkclient.Library.DA.daconfig import DAconfig
-    from mtkclient.Library.DA.xmlflash.xml_lib import DAXML
-
-    config = MtkConfig(logging.INFO)
-    # config.init_hwcode(0x1129)
-    # config.init_hwcode(0x907)
-    # config.init_hwcode(0x1209)
-    config.init_hwcode(0x1229)
-    config.hwver = 0xca00
-    config.swver = 0
-    # config.loader = "/home/bjk/Projects/mtkclient_le/Loaders/V6/motorola/mt6855_moto_g54_cancunf/DA_BR.bin"
-    # config.loader = "/home/bjk/Projects/DA_Loader/V6/oppo/MT6983/oppo_v6_MT6983.bin"
-    # config.loader = "/home/bjk/Projects/DA_Loader/V6/tcl_alcatel/T613.bin"
-    config.loader = "/home/bjk/Downloads/toDo/heapbait/MT6886_NOTHING_0x1229.bin"
-    mtk = Mtk(config=config, loglevel=logging.INFO,
-              serialportname=None)
-
-    daconfig = DAconfig(mtk=mtk, loader=mtk.config.loader,
-                        preloader=mtk.config.preloader, loglevel=logging.INFO)
-    daconfig.setup()
-    xmlflash = DAXML(mtk, daconfig, loglevel=logging.INFO)
-    xf = XmlFlashExt(mtk, xmlflash, loglevel=logging.INFO)
-    with open(config.loader, "rb") as bootldr:
-        da1offset = daconfig.da_loader.region[1].m_buf
-        bootldr.seek(da1offset)
-        # ------------------------------------------------
-        da2offset = daconfig.da_loader.region[2].m_buf
-        bootldr.seek(da2offset)
-        da1offset = daconfig.da_loader.region[1].m_buf
-        da1size = daconfig.da_loader.region[1].m_len
-        da1address = daconfig.da_loader.region[1].m_start_addr
-        da1sig_len = daconfig.da_loader.region[1].m_sig_len
-        bootldr.seek(da1offset)
-        da1 = bootldr.read(da1size)
-        # ------------------------------------------------
-        da2offset = daconfig.da_loader.region[2].m_buf
-        da2sig_len = daconfig.da_loader.region[2].m_sig_len
-        bootldr.seek(da2offset)
-        da2 = bytearray(bootldr.read(daconfig.da_loader.region[2].m_len))
-
-    hashaddr, hashmode, hashlen = mtk.daloader.compute_hash_pos(da1, da2, da1sig_len, da2sig_len,
-                                                                True)
-    # da2 = open("/home/bjk/da2/da2.bin","rb").read()
-    wdata = xf.patch_da2(da2)
-    # open("/tmp/DA_BR_2_40000000.patched.bin","wb").write(wdata)
-    xmlflash.daconfig.da2 = bytearray(da2)
-    tmp = xf.patch()
-    wdata2 = xf.patch_custom_command(da2)
 
