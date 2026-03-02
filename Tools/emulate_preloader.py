@@ -9,6 +9,7 @@ from unicorn import (Uc, UC_MEM_WRITE, UC_MEM_READ, UC_MEM_FETCH, UC_MEM_READ_UN
                      UC_HOOK_CODE, UC_MEM_WRITE_UNMAPPED, UC_MEM_FETCH_UNMAPPED, UC_MEM_WRITE_PROT,
                      UC_MEM_FETCH_PROT, UC_MEM_READ_AFTER, UC_HOOK_MEM_INVALID, UC_HOOK_MEM_READ,
                      UC_HOOK_MEM_WRITE, UC_ARCH_ARM, UC_MODE_THUMB)
+from unicorn import UcError
 from unicorn.arm_const import (UC_ARM_REG_PC, UC_ARM_REG_LR, UC_ARM_REG_R0,
                                UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3,
                                UC_ARM_REG_R4, UC_ARM_REG_R5, UC_ARM_REG_R6,
@@ -261,8 +262,8 @@ def main():
     try:
         mu.mem_map(0x10000000, 0x1000000)  # Map WD, TZCC
         mu.mem_map(0x11000000, 0x1000000)  # Map Uart+SEC_REG
-    except Exception:
-        pass
+    except UcError as e:
+        logger.warning(f"Memory mapping failed: {e}")
     reg["R0"] = 1
     reg["R1"] = 0x100000
     reg["R2"] = 16
@@ -273,8 +274,8 @@ def main():
     logger.info("Emulating Preloader")
     try:
         mu.emu_start(0x230B1D, -1, 0, 0)  # generate_fde_key
-    except Exception:
-        pass
+    except (UcError, RuntimeError) as e:
+        logger.warning(f"Emulation failed: {e}")
     logger.info("Emulation done.")
 
 

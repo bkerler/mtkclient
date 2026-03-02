@@ -122,7 +122,7 @@ def do_tcp_server(client, arguments, handler):
                             cmd = line.split(":")[0]
                             try:
                                 opts = parse_args(cmd, line.split(":")[1], arguments)
-                            except Exception:
+                            except (ValueError, IndexError, AttributeError):
                                 response = "Wrong arguments\n<NAK>\n"
                                 opts = None
                             if opts is not None:
@@ -152,7 +152,7 @@ def do_tcp_keyserver(handler):
                     break
                 try:
                     data = data.decode('utf-8')
-                except Exception:
+                except UnicodeDecodeError:
                     continue
                 print('received %s' % data)
                 if data:
@@ -250,12 +250,14 @@ def parse_args(cmd, args, mainargs):
 
 
 def getint(valuestr):
+    if valuestr == '' or valuestr is None:
+        return 0
     try:
         return int(valuestr)
-    except Exception:
+    except (ValueError, TypeError):
         try:
             return int(valuestr, 16)
-        except Exception:
+        except (ValueError, TypeError):
             return 0
 
 

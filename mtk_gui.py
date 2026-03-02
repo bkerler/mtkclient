@@ -30,6 +30,7 @@ from mtkclient.gui.main_gui import Ui_MainWindow
 import os
 import serial.tools.list_ports
 
+logger = logging.getLogger(__name__)
 
 lock = threading.Lock()
 
@@ -180,10 +181,16 @@ def getDevInfo(thread, parameters):
         else:
             with lock:
                 phone_info['cdcInit'] = True
-    except Exception as e:
-        print(f"Connection exception: {e}")  # Add for debugging; replace with thread.sendToLogSignal if available
+    except (ConnectionError, OSError, TimeoutError) as e:
+        logger.error(f"Connection exception: {e}")
         with lock:
             phone_info['cantConnect'] = True
+            phone_info['error'] = str(e)
+    except Exception as e:
+        logger.error(f"Unexpected connection error: {e}")
+        with lock:
+            phone_info['cantConnect'] = True
+            phone_info['error'] = f"Unexpected error: {str(e)}"
     with lock:
         phone_info['chipset'] = (str(mtk_class.config.chipconfig.name) +
                                  " (" + str(mtk_class.config.chipconfig.description) + ")")
@@ -488,6 +495,9 @@ class MainWindow(QMainWindow):
         self.ui.readpartitionList.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.readpartitionCheckboxes = {}
+        if guid_gpt is None or guid_gpt.partentries is None:
+            logger.error("GPT is None or has no partition entries")
+            return
         for partition in guid_gpt.partentries:
             self.readpartitionCheckboxes[partition.name] = {}
             self.readpartitionCheckboxes[partition.name]['size'] = (partition.sectors * guid_gpt.sectorsize)
@@ -505,6 +515,9 @@ class MainWindow(QMainWindow):
         self.ui.writepartitionList.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.ui.writepartitionList.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.writepartitionCheckboxes = {}
+        if guid_gpt is None or guid_gpt.partentries is None:
+            logger.error("GPT is None or has no partition entries")
+            return
         for partition in guid_gpt.partentries:
             self.writepartitionCheckboxes[partition.name] = {}
             self.writepartitionCheckboxes[partition.name]['size'] = (partition.sectors * guid_gpt.sectorsize)
@@ -533,6 +546,9 @@ class MainWindow(QMainWindow):
         self.ui.erasepartitionList.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.ui.erasepartitionList.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.erasepartitionCheckboxes = {}
+        if guid_gpt is None or guid_gpt.partentries is None:
+            logger.error("GPT is None or has no partition entries")
+            return
         for partition in guid_gpt.partentries:
             self.erasepartitionCheckboxes[partition.name] = {}
             self.erasepartitionCheckboxes[partition.name]['size'] = (partition.sectors * guid_gpt.sectorsize)
