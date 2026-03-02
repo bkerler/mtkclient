@@ -220,7 +220,7 @@ def main():
                             var1 = int(var1)
                             var1 += 1
                         break
-            except:
+            except (ValueError, struct.error, IndexError):
                 pass
 
         cmd_handler = None
@@ -322,8 +322,9 @@ def main():
         try:
             offset, rn = ldr_lit(coffs,
                                  unpack("<H", data[coffs:coffs + 2])[0])
-        except:
-            print("Err:" + sys.argv[1])
+        except (ValueError, struct.error, IndexError):
+            print(f"Error processing {sys.argv[1]}")
+            return
         send_ptr = unpack("<I", data[offset:offset + 4])[0] + 8
         send_ptr_offset = base | offset
         ctrl_addr = None

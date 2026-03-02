@@ -503,18 +503,15 @@ class Stage2(metaclass=LogBase):
 
 
 def getint(valuestr):
-    if valuestr == '':
-        return None
+    if valuestr == '' or valuestr is None:
+        return 0
     try:
         return int(valuestr)
-    except Exception as err:
-        err = err
+    except (ValueError, TypeError):
         try:
             return int(valuestr, 16)
-        except Exception as err:
-            err = err
-            pass
-    return 0
+        except (ValueError, TypeError):
+            return 0
 
 
 cmds = {

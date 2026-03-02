@@ -12,6 +12,7 @@ from unicorn import (Uc, UC_MEM_WRITE, UC_MEM_READ, UC_MEM_FETCH, UC_MEM_READ_UN
                      UC_HOOK_CODE, UC_MEM_WRITE_UNMAPPED, UC_MEM_FETCH_UNMAPPED, UC_MEM_WRITE_PROT,
                      UC_MEM_FETCH_PROT, UC_MEM_READ_AFTER, UC_HOOK_MEM_INVALID, UC_HOOK_MEM_READ,
                      UC_HOOK_MEM_WRITE, UC_ARCH_ARM, UC_MODE_ARM)
+from unicorn import UcError
 from unicorn.arm_const import (UC_ARM_REG_PC, UC_ARM_REG_LR, UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2,
                                UC_ARM_REG_R4)
 
@@ -215,16 +216,15 @@ st2 = Stage2(None)
 
 
 def getint(valuestr):
-    if valuestr == '':
-        return None
+    if valuestr == '' or valuestr is None:
+        return 0
     try:
         return int(valuestr)
-    except Exception:
+    except (ValueError, TypeError):
         try:
             return int(valuestr, 16)
-        except Exception:
-            pass
-    return 0
+        except (ValueError, TypeError):
+            return 0
 
 
 class ARMRegisters(dict):
@@ -550,8 +550,8 @@ def main():
         do_generic_emu_setup(mu, reg)
     try:
         mu.emu_start(0x21E224 + 1, 0x21E26A, 0, 0)
-    except Exception:
-        pass
+    except (UcError, RuntimeError) as e:
+        logger.warning(f"Emulation failed: {e}")
     logger.info("Emulation done.")
 
 
