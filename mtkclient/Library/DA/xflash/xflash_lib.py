@@ -84,10 +84,10 @@ class DAXFlash(metaclass=LogBase):
 
     def ack(self, rstatus=True):
         try:
-            if self.mtk.config.chipconfig.dacode in [0x6781,0x6771]:
+            if self.mtk.config.chipconfig.dacode in [0x6781]:
                 stmp = pack("<IIII", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4, 0)
                 self.usbwrite(stmp)
-            else: # needed for 0x6750, 0x6762, 0x6785, 0x6761
+            else: # needed for 0x6750, 0x6762, 0x6785, 0x6761, 0x6771
                 stmp = pack("<III", self.cmd.MAGIC, self.data_type.DT_PROTOCOL_FLOW, 4)
                 data = pack("<I", 0)
                 self.usbwrite(stmp)
