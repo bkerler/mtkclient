@@ -322,6 +322,20 @@ class Efuse:
                 base + 0x10C, base + 0x110, base + 0x114, base + 0x118, base + 0x11C,
                 0xF00000, 0xF00000, 0xF00000
             ]
+        elif hwcode in [0x992]:
+            self.efuses = [
+                base + 0x20, base + 0x38, base + 0x30, base + 0x40, base + 0x44,
+                base + 0x48, base + 0x4C, base + 0x50, 0x8000000, 0x8000000,
+                0xA, 0x8000008, base + 0x140, base + 0x144, base + 0x148,
+                base + 0x14C, base + 0x7A0, base + 0x7A4, base + 0x7A8, base + 0x7AC,
+                0x8000000, base + 0x7B0, base + 0x7B4, base + 0x7B8, base + 0x7BC,
+                base + 0x7C0, base + 0x7C4, base + 0x7C8, base + 0x7CC, 0x1D,
+                0x1E, base + 0x60, base + 0x130, 0x8000000, base + 0x120,
+                base + 0x260, base + 0x264, base + 0x268, base + 0x664, base + 0x668,
+                0x8000000, 0x8000000, 0x8000000, 0x8000000, 0x8000000,
+                0x8000000, 0x8000000, 0x8000000, 0x8000000, 0x8000000,
+                0x8000000, 0x8000000, base + 0x580
+            ]
         else:
             self.efuses = []
 
@@ -484,19 +498,20 @@ hwconfig = {
         dacode=0x0598,
         name="ELBRUS/MT0598"),
     0x992: Chipconfig(  # var1
+        # T-Mobile / Quanta D53 5G mobile hotspot (MT6890) / Dell DW5931e / Fibocom FM350-GL WWAN card (MT6880)
         watchdog=0x10007000,
-        # uart
-        # brom_payload_addr
-        # da_payload_addr
-        # gcpu_base
-        # sej_base
+        uart=0x11003000,
+        brom_payload_addr=0x100A00,
+        da_payload_addr=0x201000,
+        gcpu_base=0x10360000,
+        sej_base=0x1000A000,
         # cqdma_base
         # ap_dma_mem
         # blacklist
         efuse_addr=0x11EC0000,
         damode=DAmodes.XFLASH,
         dacode=0x0992,
-        name="MT6880/MT6890"),
+        name="MT6880/MT6890 Modem"),
     0x2601: Chipconfig(
         var1=0xA,  # Smartwatch, confirmed
         watchdog=0x10007000,
@@ -1034,7 +1049,7 @@ hwconfig = {
         ap_dma_mem=0x11000000 + 0x320,  # AP_DMA_I2C_0_RX_MEM_ADDR
         misc_lock=0x10002050,
         damode=DAmodes.LEGACY,
-        dacode=0x6589,
+        dacode=0x6583,
         name="MT6583/6589"),
     0x6592: Chipconfig(
         var1=0xA,  # confirmed
@@ -1874,8 +1889,8 @@ hwconfig = {
         da_payload_addr=0x201000,
         pl_payload_addr=0x40200000,
         gcpu_base=0x10050000,
-        dxcc_base=0x10210000,
-        sej_base=0x1000a000,
+        dxcc_base=0x1C807000,
+        sej_base=0x1C009000,
         cqdma_base=0x10212000,
         ap_dma_mem=0x11300800 + 0x1a0,
         # blacklist=[(0x102848, 0x0), (0x00106B60, 0x0)],

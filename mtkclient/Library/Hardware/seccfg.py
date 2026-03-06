@@ -103,7 +103,7 @@ class SecCfgV4(metaclass=LogBase):
                     if _hash == dec_hash:
                         self.hwtype = "HWXOR"
             else:
-                dec_hash = self.hwc.sej.sej_sec_cfg_hw_V3(self.hash, False)
+                dec_hash = self.hwc.sej.sej_sec_cfg_hw_V3(self.hash, False, legacy=False)
                 if _hash == dec_hash:
                     self.hwtype = "V3"
                 else:
@@ -318,7 +318,7 @@ class SecCfgV3(metaclass=LogBase):
         self.seccfg_status = ed.dword()
         if self.seccfg_status not in [SeccfgStatus.SEC_CFG_COMPLETE_NUM, SeccfgStatus.SEC_CFG_INCOMPLETE_NUM]:
             return False
-        self.seccfg_attr = ed.dword()
+        self.seccfg_attr = ed.dword() # offset = 0x854
         if self.seccfg_attr not in [SeccfgAttr.ATTR_DEFAULT, SeccfgAttr.ATTR_UNLOCK, SeccfgAttr.ATTR_MP_DEFAULT,
                                     SeccfgAttr.ATTR_LOCK, SeccfgAttr.ATTR_CUSTOM, SeccfgAttr.ATTR_VERIFIED]:
             return False

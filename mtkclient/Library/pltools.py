@@ -6,6 +6,7 @@ import logging
 import sys
 from binascii import hexlify
 from mtkclient.Library.Exploit.amonet import Amonet
+from mtkclient.Library.Exploit.carbonara import Carbonara
 from mtkclient.Library.Exploit.hashimoto import Hashimoto
 from mtkclient.config.payloads import PathConfig
 from mtkclient.Library.gui_utils import LogBase, logsetup, progress
@@ -55,7 +56,7 @@ class PLTools(metaclass=LogBase):
         elif self.config.ptype == "hashimoto":
             self.exploit = Hashimoto(mtk=self.mtk, loglevel=self.__logger.level)
         elif self.config.ptype == "carbonara":
-            assert "Carbonara is best served in your local restaurant :P"
+            self.exploit = Carbonara(mtk=self.mtk, loglevel=self.__logger.level)
 
         self.pathconfig = PathConfig()
         if loglevel == logging.DEBUG:
