@@ -216,6 +216,8 @@ class Preloader(metaclass=LogBase):
         meid = None
         if self.config.chipconfig.iot:
             self.config.iot = True
+        if self.config.hwcode in [0x6261]:
+            self.config.iot = True
         if not self.config.iot:
             res = self.get_hw_sw_ver()
             self.config.hw_sub_code = 0
