@@ -92,7 +92,7 @@ class MTKFileHandler(RealTimeHandler):
             return self.preoffset, self.filesize
         else:
             for gptentry in self.gpttable:
-                if gptentry.name.lower() == partitionname.lower():
+                if hasattr(gptentry,"name") and gptentry.name.lower() == partitionname.lower():
                     rpartition = gptentry
                     self.lastpartition = self.partitionname
                     self.preoffset = rpartition.sector * self.mtk.config.pagesize

@@ -234,7 +234,7 @@ class DaHandler(metaclass=LogBase):
         partition = "vbmeta" + slot
         rpartition = None
         for gptentry in gpttable:
-            if gptentry.name.lower() == partition.lower():
+            if hasattr(gptentry,"name") and gptentry.name.lower() == partition.lower():
                 rpartition = gptentry
                 break
         if rpartition is not None:
@@ -285,7 +285,7 @@ class DaHandler(metaclass=LogBase):
         rpartition = None
         gpttable = self.mtk.daloader.get_partition_data(parttype=parttype)
         for gptentry in gpttable:
-            if gptentry.name.lower() == partitionname.lower():
+            if hasattr(gptentry,"name") and gptentry.name.lower() == partitionname.lower():
                 rpartition = gptentry
                 break
         if rpartition is not None:
@@ -301,7 +301,7 @@ class DaHandler(metaclass=LogBase):
         rpartition = None
         gpttable = self.mtk.daloader.get_partition_data(parttype=parttype)
         for gptentry in gpttable:
-            if gptentry.name.lower() == partitionname.lower():
+            if hasattr(gptentry,"name") and gptentry.name.lower() == partitionname.lower():
                 rpartition = gptentry
                 break
         if rpartition is not None:
@@ -342,7 +342,7 @@ class DaHandler(metaclass=LogBase):
                 else:
                     rpartition = None
                     for gptentry in gpttable:
-                        if gptentry.name.lower() == partition.lower():
+                        if hasattr(gptentry,"name") and gptentry.name.lower() == partition.lower():
                             rpartition = gptentry
                             break
                     if rpartition is not None:
