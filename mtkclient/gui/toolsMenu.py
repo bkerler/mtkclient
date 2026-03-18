@@ -104,4 +104,4 @@ class generateKeysMenu(QObject):
                 wf.write(json.dumps(res))
         self.parent.Status["result"] = res
         self.parent.Status["done"] = True
-        self.sendUpdateSignal.emit()
+        self.sendUpdateSignal.emit(res)
