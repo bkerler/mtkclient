@@ -2082,8 +2082,8 @@ hwconfig = {
         description="Dimensity 9200/9200+"
         # loader="mt6985_payload.bin"
     ),
-    # toDo: 0x1357 MT6991
     0x1375: Chipconfig(
+        # toDo: new hw crypto Xiaomi Redmi Note 14 Pro
         var1=0xA,
         watchdog=0x1C00A000,
         # uart=0x1C011000,
@@ -2111,6 +2111,36 @@ hwconfig = {
         name="MT6878",
         description="Dimensity 7300"
         # loader="mt6878_payload.bin"
+    ),
+    0x6899: Chipconfig(
+        # toDo: new crypto hw, Xiaomi 15T
+        var1=0xA,
+        watchdog=0x1C010000,
+        uart=0x16010000,
+        brom_payload_addr=0x100A00,
+        da_payload_addr=0x201000,
+        pl_payload_addr=0x40200000,
+        # gcpu_base=0x10050000,
+        dxcc_base=0x18005000,
+        sej_base=0x1800E000,
+        # cqdma_base=0x10212000,
+        # ap_dma_mem=0x11300800 + 0x1a0,
+        # blacklist=[(0x102d5c, 0x0)],
+        # blacklist_count=0x0000000A,
+        # send_ptr=(0x102888, 0xE79C),
+        # ctrl_buffer=0x00103024,
+        # cmd_handler=0x000101E8,
+        # brom_register_access=(0xf99a, 0xfa0c),
+        # meid_addr=0x1008EC,
+        # socid_addr=0x100934,
+        # prov_addr=0x1066C0,
+        efuse_addr=0x13260000,
+        damode=DAmodes.XML,
+        dacode=0x1357,
+        has64bit=True,
+        name="MT6899",
+        description="Dimensity 8400 Turbo"
+        # loader="mt6899_payload.bin"
     ),
     0x1471: Chipconfig(
         var1=0xA,
