@@ -825,6 +825,8 @@ class DAXML(metaclass=LogBase):
                                     0x10,                                                 , 1
         """
         data = self.get_sys_property(key="DA.SLA", length=0x200000)
+        if data is None:
+            return False
         data = data.decode('utf-8')
         if "item key=" in data:
             tmp = data[data.find("item key=") + 8:]
