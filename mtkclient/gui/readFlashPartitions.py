@@ -145,6 +145,8 @@ class ReadFlashWindow(QObject):
         variables = mock.Mock()
         variables.filename = self.dumpFile
         variables.parttype = None
+        variables.offset = None
+        variables.length = None
         self.parent.Status["dumpFile"] = variables.filename
         self.da_handler.close = self.dumpPartDone  # Ignore the normally used sys.exit
         if "rpmb" in parameters:
