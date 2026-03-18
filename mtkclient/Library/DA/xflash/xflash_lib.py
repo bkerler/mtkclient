@@ -182,6 +182,9 @@ class DAXFlash(metaclass=LogBase):
             if status == 0xc0020053:
                 # Anti roll back DA error
                 sys.exit(1)
+            elif status == 0xc0020004:
+                # DL forbidden error
+                sys.exit(1)
         return False
 
     def send_devctrl(self, cmd, param=None, status=None):
