@@ -1072,7 +1072,7 @@ class DAXFlash(metaclass=LogBase):
                             if self.set_remote_sec_policy(data=sla_signature):
                                 print("SLA Signature was accepted.")
                                 return True
-        if rsakey is None:
+        if rsakey is not None:
             res = self.get_dev_fw_info()
             if res != b"":
                 data = res[4:4 + 0x10]
