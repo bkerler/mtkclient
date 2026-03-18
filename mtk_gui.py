@@ -10,7 +10,7 @@ from unittest import mock
 from functools import partial
 from PySide6.QtCore import Qt, QVariantAnimation, Signal, QObject, QSize, QTranslator, QLocale, QLibraryInfo, \
     Slot, QCoreApplication
-from PySide6.QtGui import QTextOption, QPixmap, QTransform, QIcon
+from PySide6.QtGui import QTextOption, QPixmap, QTransform, QIcon, QAction
 from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QCheckBox, QVBoxLayout, QHBoxLayout, QLineEdit, \
     QPushButton, QDialog, QListWidgetItem, QListWidget
 
@@ -27,6 +27,7 @@ from mtkclient.gui.toolsMenu import generateKeysMenu, UnlockMenu
 from mtkclient.gui.toolkit import asyncThread, trap_exc_during_debug, convert_size, CheckBox, FDialog, TimeEstim
 from mtkclient.config.payloads import PathConfig
 from mtkclient.gui.main_gui import Ui_MainWindow
+from mtkclient.gui.themes import DARK_THEME, LIGHT_THEME
 import os
 import serial.tools.list_ports
 
@@ -46,8 +47,6 @@ path = PathConfig()
 # if sys.platform.startswith('darwin'):
 #    config.ptype = "kamakiri" #Temp for Mac testing
 MtkTool = Main(variables)
-
-guiState = "welcome"
 
 class SerialPortDialog(QDialog):
     def __init__(self, parent=None):
@@ -232,7 +231,7 @@ def load_translations(application):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, thread, app, devhandler:DeviceHandler, phoneInfo, loglevel=logging.INFO):
+    def __init__(self, thread, app, devhandler:DeviceHandler, phoneInfo, loglevel=logging.INFO, is_dark=False):
         super(MainWindow, self).__init__()
         self.phoneInfo = phoneInfo
         self.loglevel = loglevel
@@ -246,14 +245,18 @@ class MainWindow(QMainWindow):
         self.timeEst = TimeEstim()
         self.timeEstTotal = TimeEstim()
         self.ui.logBox.setWordWrapMode(QTextOption.NoWrap)
-        self.ui.menubar.setEnabled(False)
+        self.ui.menuFile.setEnabled(False)
         self.ui.tabWidget.setHidden(True)
+        # View menu — always accessible, not gated by device connection
+        self.menuView = self.ui.menubar.addMenu("View")
+        self.dark_mode_action = QAction("Dark Mode", self, checkable=True)
+        self.dark_mode_action.setChecked(is_dark)
+        self.dark_mode_action.triggered.connect(self.toggle_dark_mode)
+        self.menuView.addAction(self.dark_mode_action)
         self.ui.partProgress.setHidden(True)
         self.ui.fullProgress.setHidden(True)
         self.ui.readDumpGPTCheckbox.setChecked(True)
-        self.ui.connectInfo.setMinimumSize(200, 500)
-        self.ui.connectInfo.setMaximumSize(9900, 500)
-        self.ui.showdebugbtn.clicked.connect(self.showDebugInfo)
+        self.ui.connectInfo.ui.showdebugbtn.clicked.connect(self.showDebugInfo)
         self.ui.consettingsbtn.clicked.connect(self.selectDaLoader)
         self.ui.consettings2btn.clicked.connect(self.selectPreloader)
         self.ui.iotcheck.clicked.connect(self.selectIoT)
@@ -288,12 +291,17 @@ class MainWindow(QMainWindow):
             if os.path.exists(fname):
                 self.preloader = fname
                 self.devhandler.da_handler.mtk.config.preloader_filename = fname
-                self.devhandler.da_handler.mtk.config.preloader = open(fname,'rb').read()
+                with open(fname, 'rb') as f:
+                    self.devhandler.da_handler.mtk.config.preloader = f.read()
 
     def showDebugInfo(self):
         self.ui.connectInfo.setHidden(True)
-        self.ui.tabWidget.setCurrentWidget(self.ui.debugtab)
-        self.ui.tabWidget.setHidden(False)
+        tw = self.ui.tabWidget
+        debug_idx = tw.indexOf(self.ui.debugtab)
+        for i in range(tw.count()):
+            tw.setTabVisible(i, i == debug_idx)
+        tw.setCurrentWidget(self.ui.debugtab)
+        tw.setHidden(False)
 
     @Slot()
     def updateState(self):
@@ -366,8 +374,8 @@ class MainWindow(QMainWindow):
         try:
             self.Status["currentPartitionSizeDone"] = progress
             self.updateState()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Progress update error: {e}")
 
     def setdevhandler(self, devhandler):
         self.devhandler = devhandler
@@ -573,13 +581,14 @@ class MainWindow(QMainWindow):
                                                                                 'chipset'] + "\n" + phone_info[
                                                                                 'bootMode']))
             if phone_info['daInit']:
-                self.ui.menubar.setEnabled(True)
+                self.ui.menuFile.setEnabled(True)
                 self.pixmap = QPixmap(path.get_images_path("phone_connected.png"))
                 self.ui.phoneDebugInfoTextbox.setText("")
                 self.ui.pic.setPixmap(self.pixmap)
                 self.spinnerAnim.stop()
                 self.ui.spinner_pic.setHidden(True)
                 self.ui.connectInfo.setHidden(True)
+                self.ui.splitter.collapse_top()
                 self.ui.partProgress.setHidden(False)
                 self.ui.fullProgress.setHidden(False)
                 self.initread()
@@ -588,9 +597,12 @@ class MainWindow(QMainWindow):
                 self.initerase()
                 self.initwrite()
                 self.getpartitions()
-                self.ui.tabWidget.setCurrentIndex(0)
-                self.ui.tabWidget.update()
-                self.ui.tabWidget.setHidden(False)
+                tw = self.ui.tabWidget
+                for i in range(tw.count()):
+                    tw.setTabVisible(i, True)
+                tw.setCurrentIndex(0)
+                tw.update()
+                tw.setHidden(False)
             else:
                 if 'cantConnect' in phone_info:
                     self.ui.phoneInfoTextbox.setText(
@@ -609,7 +621,7 @@ class MainWindow(QMainWindow):
 
     def initpixmap(self):
         # phone spinner
-        self.pixmap = QPixmap(path.get_images_path("phone_loading.png")).scaled(96, 96, Qt.KeepAspectRatio,
+        self.pixmap = QPixmap(path.get_images_path("phone_loading.png")).scaled(64, 64, Qt.KeepAspectRatio,
                                                                                 Qt.SmoothTransformation)
         self.pixmap.setDevicePixelRatio(2)
         self.ui.spinner_pic.setPixmap(self.pixmap)
@@ -622,7 +634,7 @@ class MainWindow(QMainWindow):
         self.ui.logoPic.setPixmap(logo)
 
         init_steps = QPixmap(path.get_images_path("initsteps.png"))
-        self.ui.initStepsImage.setPixmap(init_steps)
+        self.ui.connectInfo.ui.initStepsImage.setPixmap(init_steps)
 
         self.spinnerAnim = QVariantAnimation()
         self.spinnerAnim.setDuration(3000)
@@ -633,6 +645,9 @@ class MainWindow(QMainWindow):
 
         self.ui.spinner_pic.setHidden(True)
 
+    def toggle_dark_mode(self, checked: bool):
+        self.app.setStyleSheet(DARK_THEME if checked else LIGHT_THEME)
+
 
 def main():
     # Enable nice 4K Scaling
@@ -640,13 +655,19 @@ def main():
 
     # Init the app window
     app = QApplication(sys.argv)
+
+    # Detect system dark mode preference (Qt.ColorScheme available since Qt 6.5)
+    is_dark = (app.styleHints().colorScheme() == Qt.ColorScheme.Dark)
+    app.setStyleSheet(DARK_THEME if is_dark else LIGHT_THEME)
+
     load_translations(app)
 
     loglevel = logging.INFO
     devhandler = DeviceHandler(parent=app, preloader=None, loader=None, loglevel=loglevel)
     phoneInfo = {"chipset": "", "bootMode": "", "daInit": False, "cdcInit": False, "cantConnect": False}
     thread = asyncThread(parent=app, n=0, function=getDevInfo, parameters=[loglevel, phoneInfo, devhandler])
-    win = MainWindow(thread=thread,app=app, devhandler=devhandler, phoneInfo=phoneInfo, loglevel=loglevel)
+    win = MainWindow(thread=thread, app=app, devhandler=devhandler, phoneInfo=phoneInfo, loglevel=loglevel,
+                     is_dark=is_dark)
 
     icon = QIcon()
     icon.addFile(path.get_images_path('logo_32.png'), QSize(32, 32))
@@ -662,14 +683,8 @@ def main():
         dpiMultiplier = 2
     else:
         dpiMultiplier = 1
-    addTopMargin = 20
-    if sys.platform.startswith('darwin'):  # MacOS has the toolbar in the top bar insted of in the app...
-        addTopMargin = 0
-    win.setWindowTitle("MTKClient - Version 2.1.3")
-    # lay = QVBoxLayout(self)
-
+    win.setWindowTitle("MTKClient - Version 2.1.4")
     win.show()
-    # win.setFixedSize(746, 400 + addTopMargin)
 
     # Device setup
     devhandler.sendToLogSignal.connect(win.sendToLog)
