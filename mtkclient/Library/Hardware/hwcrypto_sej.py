@@ -801,7 +801,8 @@ class Sej(metaclass=LogBase):
         # 0x335 = MT6737M/MT6735G
         # 0x321 = MT6735/T,MT8735A
         # 0x337 = MT6753
-        if self.hwcode in [0x6795, 0x335, 0x321, 0x337]:
+        # 0x279 = MT6797/MT6767
+        if self.hwcode in [0x6795, 0x335, 0x321, 0x337, 0x279]:
             legacy = False
         acon_setting = self.HACC_AES_CHG_BO_OFF | self.HACC_AES_128
         if iv is not None:
