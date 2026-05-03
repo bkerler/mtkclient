@@ -731,6 +731,11 @@ class Main(metaclass=LogBase):
                     mtk.step = int(self.args.step, 16)
             except Exception:
                 pass
+            try:
+                if self.args.iot is not None:
+                    mtk.config.iot = self.args.iot
+            except Exception:
+                pass
             mtk = da_handler.connect(mtk, directory)
             if mtk is not None:
                 mtk = da_handler.configure_da(mtk)

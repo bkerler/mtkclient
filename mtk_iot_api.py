@@ -34,8 +34,10 @@ def main():
         print("Usage: python mtk_iot_api.py /dev/ttyUSB0")
         sys.exit(1)
     port = sys.argv[1]
-    bytestoread=0x400000
-    pos=0
+    if port=="None":
+        port=None
+    bytestoread=0x800000
+    pos=0x0
     mtk = init(preloader=None, loader=None,serialport=port)
     mtk.config.iot = True
     offs={}
@@ -43,7 +45,8 @@ def main():
         while bytestoread>0:
             inited = mtk.preloader.init(directory="")
             if inited:
-                data=mtk.preloader.dump_internal_flash(offset=pos,length=bytestoread,step=0x1000,filename="")
+                data=mtk.preloader.dump_internal_flash(offset=pos,length=bytestoread,step=0x1000,
+                                                       filename="", dump_flash=True)
                 if len(data)==0:
                     if not pos in offs:
                         offs[pos]=0

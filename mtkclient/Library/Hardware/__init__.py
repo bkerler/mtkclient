@@ -4,8 +4,9 @@ class HWRegister:
     - .value reads/writes the register (triggers self.read32 / self.write32)
     - Direct assignment on the parent map also works for convenience
     """
-    def __init__(self, read32, write32, addr, name):
+    def __init__(self, read32, write32, addr, name, offset):
         self.addr = addr          # the address from regs
+        self.offset = offset      # the register offset
         self.name = name          # optional, for debugging
         self._read32 = read32     # bound method or function
         self._write32 = write32
@@ -46,10 +47,11 @@ class RegisterMap:
         self._base_addr = base_addr
 
     def __getattr__(self, name):
-        """Called when you do regs.SSR_BASE (or .addr, .value, etc.)"""
+        """Called when you do regs.SSR_BASE (or .addr, .value, .offset, etc.)"""
         if name in self._regs:
             addr = self._regs[name] + self._base_addr
-            return HWRegister(self._read32, self._write32, addr, name)
+            offset = self._regs[name]
+            return HWRegister(self._read32, self._write32, addr, name, offset)
         raise AttributeError(f"Register '{name}' not found in regs")
 
     def __setattr__(self, name, value):
@@ -73,4 +75,10 @@ class RegisterMap:
         """regs.addr('SSR_BASE') → returns the address directly"""
         if name in self._regs:
             return self._regs[name] + self._base_addr
+        raise KeyError(name)
+
+    def offset(self, name):
+        """regs.offset('SSR_BASE') → returns the offset of the register"""
+        if name in self._regs:
+            return self._regs[name]
         raise KeyError(name)

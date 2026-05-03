@@ -20,6 +20,7 @@ def init(preloader, loader, serialport=None):
     mtk = Mtk(config=config, loglevel=loglevel, serialportname=serialport)
     return mtk
 
+
 def connect(mtk, directory=".", loglevel=logging.INFO):
     da_handler = DaHandler(mtk, loglevel)
     mtk = da_handler.connect(mtk, directory)

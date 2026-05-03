@@ -10,6 +10,7 @@ from struct import pack
 from Cryptodome.Util.number import bytes_to_long
 from Cryptodome.Cipher import AES
 from Cryptodome.Util import Counter
+
 from mtkclient.Library.gui_utils import LogBase, logsetup
 
 Lcs = 0xA
@@ -410,6 +411,18 @@ DSCRPTR = {
     "DSCRPTR_QUEUE1_WATERMARK": [0xeb8, 0x0, 0xa],
     "DSCRPTR_QUEUE1_CONTENT": [0xebc, 0x0, 0xa]
 }
+
+SRAM = {
+    "DX_SRAM_DATA": [0xF00, 0x0, 0x20],
+    "DX_SRAM_ADDR": [0xF04, 0x0, 0xF],
+    "DX_SRAM_DATA_READY": [0xF08, 0x0, 0x1],
+}
+
+HOST = {
+    "DX_HOST_IRQ_TIMER_INITL": [0xAD4, 0x0, 0x18],
+    "DX_HOST_VERSION": [0xAD8, 0x0, 0x20],
+}
+
 
 HASH = {
     "HASH_H0": [0x640, 0x0, 0x20],
@@ -1045,6 +1058,7 @@ class Dxcc(metaclass=LogBase):
     DX_HOST_SEP_HOST_GPR2 = 0xA90
     DX_HOST_SEP_HOST_GPR3 = 0xA9C
     DX_HOST_SEP_HOST_GPR4 = 0xAA0
+    DX_HOST_IRQ_TIMER_INITL = 0xAD4
 
     def sb_hal_clear_interrupt_bit(self):
         self.write32(self.dxcc_base + self.DX_HOST_ICR, 4)
@@ -1064,9 +1078,14 @@ class Dxcc(metaclass=LogBase):
         return value1
 
     def sasi_sb_adddescsequence(self, data):
-        while True:
-            if self.read32(self.dxcc_base + self.DX_DSCRPTR_QUEUE0_CONTENT) << 0x1C != 0:
-                break
+        if self.ssr_clk_base:
+            while True:
+                if self.read32(self.dxcc_base + self.DX_DSCRPTR_QUEUE0_CONTENT) & 0xF != 0:
+                    break
+        else:
+            while True:
+                if self.read32(self.dxcc_base + self.DX_DSCRPTR_QUEUE0_CONTENT) << 0x1C != 0:
+                    break
         self.write32(self.dxcc_base + self.DX_DSCRPTR_QUEUE0_WORD0, data[0])
         self.write32(self.dxcc_base + self.DX_DSCRPTR_QUEUE0_WORD1, data[1])
         self.write32(self.dxcc_base + self.DX_DSCRPTR_QUEUE0_WORD2, data[2])
@@ -1078,6 +1097,7 @@ class Dxcc(metaclass=LogBase):
         self.__logger, self.info, self.debug, self.warning, self.error = logsetup(self, self.__logger, loglevel, gui)
         self.hwcode = setup.hwcode
         self.dxcc_base = setup.dxcc_base
+        self.ssr_clk_base = setup.ssr_clk_base
         self.read32 = setup.read32
         self.write32 = setup.write32
         self.writemem = setup.writemem
@@ -1085,22 +1105,96 @@ class Dxcc(metaclass=LogBase):
 
         self.reg = DxccReg(setup)
 
-    def tzcc_clk(self, value):
+    def cc_special_init(self, value):
+        if value==3:
+            self.write32(0x10001C48, 0x20000000)
+            val = self.read32(self.ssr_clk_base+0x44)
+            self.write32(0x1C001EA0, val & ((~1)&0xFFFFFFFF))
+
+    def cc_sec_init(self, value):
+        self.write32(0x1C001000,0xB160001)
         if value:
-            if self.hwcode in [0x1209]:
-                res = self.write32(0x10001084, 0x600)
+            val = self.read32(0x1C001EA0)
+            self.write32(0x1C001EA0,val|4)
+            while True:
+                val = self.read32(0x1C001EA0)
+                if val & 0x40000000 != 0:
+                    break
+
+            val = self.read32(0x1C001EA0)
+            self.write32(0x1C001EA0,val|8)
+            while True:
+                val = self.read32(0x1C001EA0)
+                if val & 0x80000000 != 0:
+                    break
+
+            val = self.read32(0x1C001EA0)
+            self.write32(0x1C001EA0, val & ((~0x10)&0xFFFFFFFF))
+            val = self.read32(0x1C001EA0)
+            self.write32(0x1C001EA0, val & ((~0x2) & 0xFFFFFFFF))
+            val = self.read32(0x1C001EA0)
+            self.write32(0x1C001EA0, val | 1)
+
+            # Special flag
+            special_flag = 1
+            if special_flag == 1:
+                val = self.read32(0x1C001EA0)
+                self.write32(0x1C001EA0, val | 0x10000000)
+                val = self.read32(0x1C001EA0)
+                self.write32(0x1C001EA0, val & ((~0x2000000) & 0xFFFFFFFF))
+                val = self.read32(0x1C001EA0)
+                self.write32(0x1C001EA0, val | 0x20000000)
+                val = self.read32(0x1C001EA0)
+                self.write32(0x1C001EA0, val & ((~0x10000000) & 0xFFFFFFFF))
+                special_flag = 0
+
+            val = self.read32(0x1C001EA0)
+            self.write32(0x1C001EA0, val & ((~0x100) & 0xFFFFFFFF))
+            while True:
+                val = self.read32(0x1C001EA0)
+                if val & 0x1000 != 0:
+                    break
+            self.cc_special_init(3)
+        val = self.read32(0x1C001EA0)
+        if (val>>30)&1 or (val>>31)!=value:
+            if value:
+                self.debug("Crypto engine on")
             else:
-                res = self.write32(0x1000108C, 0x18000000)
+                self.debug("Crypto engine off")
+
+    def tzcc_clk(self, value):
+        if self.ssr_clk_base:
+            if value:
+                self.cc_sec_init(1)
+                val = self.read32(self.ssr_clk_base + 8)
+                if (val&3)!=0:
+                    self.write32(self.ssr_clk_base + 8,val|3)
+                res = self.read32(self.ssr_clk_base + 8)
+                if (res&1)==0:
+                    self.debug("CC TOPCK Disabled")
+                if (res&2)!=0:
+                    self.debug("CC SEC Disabled")
+            else:
+                res = self.read32(self.ssr_clk_base + 8)
+                if (res & 3) != 0:
+                    self.write32(self.ssr_clk_base + 8, res & 0xFFFFFFFC)
         else:
-            if self.hwcode in [0x1209]:
-                res = self.write32(0x10001080, 0x200)
+            if value:
+                if self.hwcode in [0x1209]:
+                    res = self.write32(0x10001084, 0x600)
+                else:
+                    res = self.write32(0x1000108C, 0x18000000)
             else:
-                res = self.write32(0x10001088, 0x8000000)
+                if self.hwcode in [0x1209]:
+                    res = self.write32(0x10001080, 0x200)
+                else:
+                    res = self.write32(0x10001088, 0x8000000)
         return res
 
     def generate_itrustee_fbe(self, key_sz=32, appid: bytes = b""):
         salt = b"TrustedCorekeymaster" + b"\x07" * 0x10 + appid
         return self.generate_aes_cmac(key_sz=key_sz, salt=salt)
+
 
     def generate_aes_cmac(self, key_sz=32, salt: bytes = b""):
         fdekey = b""
@@ -1117,29 +1211,29 @@ class Dxcc(metaclass=LogBase):
         return fdekey
 
     def generate_moto_rpmb(self):
-        rpmb_ikey = bytearray(b"CCUSTOMM")
-        rpmb_salt = bytearray(b"MOTO")
-        for i in range(len(rpmb_ikey)):
-            rpmb_ikey[i] = rpmb_ikey[i]
-        for i in range(len(rpmb_salt)):
-            rpmb_salt[i] = rpmb_salt[i]
+        context = bytearray(b"CCUSTOMM")
+        label = bytearray(b"MOTO")
+        for i in range(len(context)):
+            context[i] = context[i]
+        for i in range(len(label)):
+            label[i] = label[i]
 
         keylength = 0x10
         self.tzcc_clk(1)
         dstaddr = self.da_payload_addr - 0x300
         if self.hwcode == 0x1129:
             dstaddr = 0x20F1000
-        rpmbkey = self.sbrom_key_derivation(1, rpmb_ikey, rpmb_salt, keylength, dstaddr)
+        rpmbkey = self.sbrom_key_derivation(1, context, label, keylength, dstaddr)
         self.tzcc_clk(0)
         return rpmbkey
 
     def generate_rpmb(self, level=0):
-        rpmb_ikey = bytearray(b"RPMB KEY")
-        rpmb_salt = bytearray(b"SASI")
-        for i in range(len(rpmb_ikey)):
-            rpmb_ikey[i] = rpmb_ikey[i] + level
-        for i in range(len(rpmb_salt)):
-            rpmb_salt[i] = rpmb_salt[i] + level
+        context = bytearray(b"RPMB KEY")
+        label = bytearray(b"SASI")
+        for i in range(len(context)):
+            context[i] = context[i] + level
+        for i in range(len(label)):
+            label[i] = label[i] + level
 
         keylength = 0x20
         if level > 0:
@@ -1148,7 +1242,7 @@ class Dxcc(metaclass=LogBase):
         dstaddr = self.da_payload_addr - 0x300
         if self.hwcode == 0x1129:
             dstaddr = 0x20F1000
-        rpmbkey = self.sbrom_key_derivation(1, rpmb_ikey, rpmb_salt, keylength, dstaddr)
+        rpmbkey = self.sbrom_key_derivation(1, context, label, keylength, dstaddr)
         self.tzcc_clk(0)
         return rpmbkey
 
@@ -1167,14 +1261,14 @@ class Dxcc(metaclass=LogBase):
         return hash
 
     def generate_rpmb_mitee(self):
-        rpmb_ikey = bytes.fromhex("AD1AC6B4BDF4EDB7")
-        rpmb_salt = bytes.fromhex("69EF6584")
+        context = bytes.fromhex("AD1AC6B4BDF4EDB7")
+        label = bytes.fromhex("69EF6584")
         keylength = 0x10
         self.tzcc_clk(1)
         dstaddr = self.da_payload_addr - 0x300
         if self.hwcode == 0x1129:
             dstaddr = 0x20F1000
-        rpmbkey = self.sbrom_key_derivation(1, rpmb_ikey, rpmb_salt, keylength, dstaddr)
+        rpmbkey = self.sbrom_key_derivation(1, context, label, keylength, dstaddr)
         self.tzcc_clk(0)
         return rpmbkey
 
@@ -1334,7 +1428,7 @@ class Dxcc(metaclass=LogBase):
             return 0xF2000002
         if requestedlen > 0xFF or (requestedlen << 28) & 0xFFFFFFFF:
             return 0xF2000003
-        if 0x0 >= len(label) > 0x20:
+        if len(label) <= 0 or len(label) > 0x20:
             return 0xF2000003
         bufferlen = len(salt) + 3 + len(label)
         iterlength = (requestedlen + 0xF) >> 4
@@ -1344,6 +1438,47 @@ class Dxcc(metaclass=LogBase):
             if dstaddr != 0:
                 for field in self.read32(dstaddr, 4):
                     result.extend(pack("<I", field))
+        return result
+
+    def sp800108_cmac_kdf(self, label, context, requestedlen, aeskeytype=HwCryptoKey.ROOT_KEY, destaddr=None):
+        if aeskeytype > HwCryptoKey.PLATFORM_KEY or (1 << (aeskeytype - 1) & 0x17) == 0:
+            return 0xF2000002
+        if requestedlen > 0xFF0:
+            return 0xF2000003
+        if label is None or len(label) <= 0 or len(label) > 0x40:
+            return 0xF2000003
+        if context is None or len(context) <= 0 or len(context) > 0x40:
+            return 0xF2000003
+        if destaddr is None:
+            destaddr = self.da_payload_addr - 0x300
+            if self.hwcode == 0x1129:
+                destaddr = 0x20F1000
+
+        result = bytearray()
+        remaining = requestedlen
+        outlen_bits = requestedlen * 8
+        if outlen_bits <= 0xFF:
+            length_field = outlen_bits.to_bytes(1, "big")
+        else:
+            length_field = outlen_bits.to_bytes(2, "big")
+
+        self.tzcc_clk(1)
+        try:
+            for i in range((requestedlen + 0xF) >> 4):
+                _buffer = bytes([i + 1]) + label + b"\x00" + context + length_field
+                paddr = self.sbrom_aes_cmac(aeskeytype, 0x0, _buffer, 0, len(_buffer), destaddr)
+                if paddr == 0:
+                    return bytearray()
+                block = bytearray()
+                for field in self.read32(paddr, 4):
+                    block.extend(pack("<I", field))
+                chunksz = min(remaining, AES_BLOCK_SIZE_IN_BYTES)
+                result.extend(block[:chunksz])
+                remaining -= chunksz
+                if remaining == 0:
+                    break
+        finally:
+            self.tzcc_clk(0)
         return result
 
     def sbrom_aes_cmac(self, aes_key_type, internal_key, data_in, dma_mode, bufferlen, destaddr):
@@ -1394,6 +1529,8 @@ class Dxcc(metaclass=LogBase):
     def sbrom_aes_cmac_driver(self, aes_key_type, p_internal_key, p_data_in, dma_mode, block_size, p_data_out):
         iv_sram_addr = 0
         if aes_key_type == HwCryptoKey.ROOT_KEY:
+            if ((self.read32(self.dxcc_base + self.DX_HOST_IRQ_TIMER_INITL) >> 8) & 1) != 0:
+                return False
             if (self.read32(self.dxcc_base + self.DX_HOST_SEP_HOST_GPR4) >> 1) & 1 == 1:
                 key_size_in_bytes = 0x20  # SEP_AES_256_BIT_KEY_SIZE
             else:

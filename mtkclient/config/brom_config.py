@@ -376,7 +376,7 @@ class Chipconfig:
 
     def __init__(self, var1=None, watchdog=None, uart=None, brom_payload_addr=None,
                  da_payload_addr=None, pl_payload_addr=None, cqdma_base=None, sej_base=None,
-                 dxcc_base=None, ssr_base = None, ssr_clk_base = None,
+                 dxcc_base=None, ssr_base = None, ssr_clk_base = None, cc_clk_base = 0x10000000,
                  gcpu_base=None, ap_dma_mem=None, name="", description="", dacode=None,
                  meid_addr=None, socid_addr=None, blacklist=(), blacklist_count=None,
                  send_ptr=None, ctrl_buffer=(), cmd_handler=None, brom_register_access=None,
@@ -395,6 +395,7 @@ class Chipconfig:
         self.dxcc_base = dxcc_base
         self.ssr_clk_base = ssr_clk_base
         self.ssr_base = ssr_base
+        self.cc_clk_base = cc_clk_base
         self.name = name
         self.description = description
         self.dacode = dacode
@@ -2101,6 +2102,7 @@ hwconfig = {
         # gcpu_base=0x10050000,
         ssr_base=0x10400000,
         ssr_clk_base=0x10400000,
+        dxcc_base=0x1040C000,
         sej_base=0x1040E000,
         # cqdma_base=0x10212000,
         # ap_dma_mem=0x11300800 + 0x1a0,

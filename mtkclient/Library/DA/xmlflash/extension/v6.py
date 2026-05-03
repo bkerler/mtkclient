@@ -923,7 +923,7 @@ class XmlFlashExt(metaclass=LogBase):
         return None
 
     def custom_write(self, addr, data) -> bool:
-        xmlcmd = self.xflash.cmd.create_cmd("CUSTOMMEMR")
+        xmlcmd = self.xflash.cmd.create_cmd("CUSTOMMEMW")
         if self.xsend(xmlcmd):
             result = self.xflash.get_response()
             if result == "OK":
@@ -1002,6 +1002,7 @@ class XmlFlashExt(metaclass=LogBase):
         setup.da_payload_addr = self.config.chipconfig.da_payload_addr
         setup.sej_base = self.config.chipconfig.sej_base
         setup.ssr_clk_base = self.config.chipconfig.ssr_clk_base
+        setup.cc_clk_base = self.config.chipconfig.cc_clk_base
         setup.ssr_base = self.config.chipconfig.ssr_base
         setup.read32 = self.readmem
         setup.write32 = self.writeregister
@@ -1306,9 +1307,45 @@ class XmlFlashExt(metaclass=LogBase):
             self.info("Generating ssr rpmbkey...")
             rpmbkey = hwc.aes_hwcrypt(btype="ssr", mode="rpmb")
             if rpmbkey is not None:
-                self.info(f"RPMB        : {rpmbkey.hex()}")
+                self.info(f"RPMB_SSR    : {rpmbkey.hex()}")
                 self.config.hwparam.writesetting("rpmbkey", rpmbkey.hex())
                 retval["rpmbkey"] = rpmbkey.hex()
+            self.info("Generating ssr fde key...")
+            fdekey = hwc.aes_hwcrypt(btype="ssr", mode="fde")
+            if fdekey is not None:
+                self.info(f"FDE_SSR     : {fdekey.hex()}")
+                self.config.hwparam.writesetting("fdekey", fdekey.hex())
+                retval["fdekey"] = fdekey.hex()
+            self.info("Generating ssr rot / base key...")
+            rotkey = hwc.aes_hwcrypt(btype="ssr", mode="rot")
+            if rotkey is not None:
+                self.info(f"ROT_SSR     : {rotkey.hex()}")
+                self.config.hwparam.writesetting("rotkey_ssr", rotkey.hex())
+                retval["rotkey"] = rotkey.hex()
+            self.info("Generating ssr motorola key...")
+            motorolakey = hwc.aes_hwcrypt(btype="ssr", mode="motorola")
+            if motorolakey is not None:
+                self.info(f"MOTO_SSR    : {motorolakey.hex()}")
+                self.config.hwparam.writesetting("motokey_ssr", motorolakey.hex())
+                retval["motokey"] = motorolakey.hex()
+            self.info("Generating custom1 key...")
+            custom1key = hwc.aes_hwcrypt(btype="ssr", mode="custom1")
+            if custom1key is not None:
+                self.info(f"CUSTOM1_SSR : {custom1key.hex()}")
+                self.config.hwparam.writesetting("custom1key_ssr", custom1key.hex())
+                retval["custom1key"] = custom1key.hex()
+            self.info("Generating custom2 key...")
+            custom2key = hwc.aes_hwcrypt(btype="ssr", mode="custom2")
+            if custom2key is not None:
+                self.info(f"CUSTOM2_SSR : {custom2key.hex()}")
+                self.config.hwparam.writesetting("custom2key_ssr", custom2key.hex())
+                retval["custom2key"] = custom2key.hex()
+            self.info("Generating fw enc key...")
+            fwkey = hwc.aes_hwcrypt(btype="ssr", mode="fw")
+            if fwkey is not None:
+                self.info(f"FW_CC       : {fwkey.hex()}")
+                self.config.hwparam.writesetting("fwkey_cc", fwkey.hex())
+                retval["fwkey"] = fwkey.hex()
             return retval
         if self.config.chipconfig.dxcc_base is not None:
             # self.info("Generating provision key...")

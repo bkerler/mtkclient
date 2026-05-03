@@ -6,7 +6,7 @@ import sys
 
 from Cryptodome.Cipher import AES
 
-from mtkclient.Library.Hardware.hwcrypto_ssr import SSR
+from mtkclient.Library.Hardware.hwcrypto_ssr import SSR, RpmbType
 from mtkclient.Library.mtk_crypto import decrypt_nvitem, encrypt_nvitem
 from mtkclient.Library.gui_utils import LogBase, logsetup
 from mtkclient.Library.Hardware.hwcrypto_gcpu import GCpu
@@ -33,7 +33,7 @@ class CryptoSetup:
     efuse_base = None
     ssr_base = None
     ssr_clk_base = None
-
+    cc_clk_base = None
 
 class HwCrypto(metaclass=LogBase):
     def __init__(self, setup, loglevel=logging.INFO, gui: bool = False):
@@ -132,7 +132,23 @@ class HwCrypto(metaclass=LogBase):
                 return self.dxcc.generate_sha256(data=data)
         elif btype == "ssr":
             if mode == "rpmb":
-                return self.ssr.generate_rpmb()
+                return self.ssr.generate_rpmb(level=RpmbType.RPMB.value)
+            elif mode == "fde":
+                return self.ssr.generate_rpmb(level=RpmbType.FDE.value)
+            elif mode == "rot":
+                return self.ssr.generate_rpmb(level=RpmbType.ROT.value)
+            elif mode == "motorola":
+                return self.ssr.generate_rpmb(level=RpmbType.MOTOROLA.value)
+            elif mode == "custom1":
+                return self.ssr.generate_rpmb(level=RpmbType.CUSTOM1.value)
+            elif mode == "custom2":
+                return self.ssr.generate_rpmb(level=RpmbType.CUSTOM2.value)
+            elif mode == "fw":
+                return self.ssr.generate_rpmb(level=RpmbType.AES_IMG_ENC.value)
+            elif mode == "aescmac":
+                return self.ssr.generate_aes_cmac(data=data)
+            elif mode == "sha256":
+                return self.ssr.generate_sha256(data=data)
         else:
             self.error(f"Unknown aes_hwcrypt type: {btype}")
             self.error("aes_hwcrypt supported types are: sej")
@@ -163,4 +179,3 @@ class HwCrypto(metaclass=LogBase):
             refreshcache(b"\xB1")
             self.info("CQDMA Disable Range Blacklist")
             self.cqdma.disable_range_blacklist()
-

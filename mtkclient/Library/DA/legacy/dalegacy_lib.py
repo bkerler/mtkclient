@@ -540,7 +540,7 @@ class DALegacy(metaclass=LogBase):
         self.daconfig.legacy_storage.emmc = Legacy_EmmcInfo(self.config, self.usbread(0x5C))
         self.daconfig.legacy_storage.sdc = Legacy_SdcInfo(self.config, self.usbread(0x1C))
         self.daconfig.legacy_storage.flashconfig = Legacy_ConfigInfo(self.usbread(0x26))
-        if self.config.hwcode == 0x8163:
+        if self.config.hwcode in [0x8127,0x8163]:
             status = self.usbread(4)
             _ = status
         pi = PassInfo(self.usbread(0xA))
