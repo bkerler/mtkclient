@@ -79,7 +79,7 @@ Download latest Magisk [here](https://github.com/topjohnwu/Magisk/releases/lates
 adb install app-release.apk
 ```
 - accept auth rsa request on mobile screen of course to allow adb connection
-- on Xiaomi phones if installattion fails try to turn off MIUI optimization in Developer options,
+- on Xiaomi phones if installation fails try to turn off MIUI optimization in Developer options,
   restart, and try again
 
 5. Upload boot to /sdcard/Download
