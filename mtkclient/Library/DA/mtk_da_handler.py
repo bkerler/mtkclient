@@ -15,7 +15,7 @@ from mtkclient.config.brom_config import Efuse, DAmodes
 from mtkclient.Library.Filesystem.mtkdafs import MtkDaFS
 
 try:
-    from fuse import FUSE
+    from mfusepy import FUSE
 except ImportError:
     FUSE = None
 
