@@ -12,5 +12,5 @@ keystone-engine
 capstone
 unicorn
 keystone
-fusepy
+mfusepy
 
