@@ -347,11 +347,13 @@ class DaHandler(metaclass=LogBase):
                             break
                     if rpartition is not None:
                         if length is None:
-                            length = rpartition.sectors * self.config.pagesize
+                            readlength = rpartition.sectors * self.config.pagesize
+                        else:
+                            readlength = length
                         if display:
                             self.info(f'Dumping partition "{rpartition.name}"')
                         if self.mtk.daloader.readflash(addr=(rpartition.sector * self.config.pagesize) + offset,
-                                                       length=length,
+                                                       length=readlength,
                                                        filename=partfilename, parttype=parttype, display=display):
                             if display:
                                 self.info(f"Dumped sector {str(rpartition.sector)} with sector count " +
