@@ -1581,7 +1581,7 @@ class SSR_SHA(SSRCrypto):
 # Example/test code
 if __name__ == "__main__":
     # Example usage without hardware (for testing structure)
-
+    """
     # Mock read/write functions for testing
     registers = {}
     KDF_CTX_BASE = 0x14003000
@@ -1611,3 +1611,4 @@ if __name__ == "__main__":
     print(f"Return code: {ret}")
     print(f"Derived key length: {len(derived)}")
     print(f"Derived key (hex): {derived.hex()}")
+    """
