@@ -73,8 +73,8 @@ class Port(metaclass=LogBase):
             while i < length:
                 if ep_out(int.to_bytes(startcmd[i], 1, 'little')):
                     v = ep_in(1, timeout=20)  # Do not wait 1 sec, bootloader is only active for 0.3 sec.
-                    if len(v) == 1 and v[0] == ~(startcmd[i]) & 0xFF:
-                        i += 1
+                    if len(v) == 1 and (v[0] == ~(startcmd[i]) & 0xFF or v[0] == startcmd[i]):
+                        i += 1  # complement (UART) or same-byte echo (USB command mode)
                     else:
                         i = 0
             self.info("Device detected :)")
@@ -134,40 +134,43 @@ class Port(metaclass=LogBase):
         self.cdc.setcontrollinestate(rts=True)
 
         startcmd = b"\xa0\x0a\x50\x05"
-        expected_echo = bytes(~b & 0xFF for b in startcmd)  # Precompute: b'\x5f\xf5\xaf\xfa'
 
         brom_pids = [0x3, 0xF200, 0xD1E9, 0xD1E2, 0xD1EC, 0xD1DD]
         if self.cdc.pid not in brom_pids:
-            ep_out(b"\xa0")  # Send first byte separately if needed
+            ep_out(b"\xa0")
 
         for attempt in range(retries):
-            received = b""
             try:
+                # Flush any bytes BROM sent before we started
+                try:
+                    ep_in(maxinsize, timeout=50)
+                except Exception:
+                    pass
+
+                success = True
                 for byte in startcmd:
-                    written = ep_out(bytes([byte]), timeout=500)  # Explicit timeout
-                    if written != 1:
-                        raise ValueError("Write failed")
+                    ep_out(bytes([byte]), timeout=500)
+                    got_echo = False
+                    for _ in range(64):
+                        try:
+                            echo = ep_in(1, timeout=100)
+                            if len(echo) == 1:
+                                if echo[0] == (~byte & 0xFF) or echo[0] == byte:
+                                    got_echo = True  # complement (UART) or same-byte (USB)
+                                    break
+                        except Exception:
+                            break
+                    if not got_echo:
+                        success = False
+                        break
 
-                    # Read exactly 1 echo byte (fastest)
-                    echo = ep_in(1, timeout=500)
-                    if len(echo) != 1 or echo[0] != (~byte & 0xFF):
-                        raise ValueError(f"Echo mismatch: got {echo!r}, expected {~byte & 0xFF:02x}")
-
-                    received += echo
-
-                if received == expected_echo:
+                if success:
                     self.info("Device detected :)")
                     return True
 
-            except Exception as e:  # Includes USBError, timeout, pipe error
+            except Exception as e:
                 self.debug(f"Handshake attempt {attempt + 1} failed: {e}")
-                time.sleep(0.01)  # Short backoff
-
-            # Optional: flush input buffer before retry
-            try:
-                ep_in(maxinsize, timeout=50)  # Discard any stale data
-            except:
-                pass
+                time.sleep(0.01)
 
         self.info("Handshake failed after retries")
         return False
