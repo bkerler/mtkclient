@@ -740,6 +740,21 @@ class DAXML(metaclass=LogBase):
                     else:
                         self.error("DA XML Extensions failed.")
                         self.daext = False
+                        # Drain any residual protocol messages (CMD:END → ACK → CMD:START)
+                        # to prevent USB desync with the next command. When DA responds with
+                        # ERR!UNSUPPORTED (e.g. custom DA without extension support), the
+                        # follow-up protocol sequence must be consumed, otherwise leftover
+                        # frames corrupt the next xread() call (e.g. GPT read).
+                        if "ERR" in str(data):
+                            try:
+                                scmd, _ = self.get_command_result()
+                                if scmd == "CMD:END":
+                                    self.ack()
+                                    tcmd, _ = self.get_command_result()
+                                    if tcmd == "CMD:START":
+                                        pass
+                            except Exception:
+                                pass
                 # parttbl = self.read_partition_table()
                 self.config.hwparam.writesetting("hwcode", hex(self.config.hwcode))
                 return True
