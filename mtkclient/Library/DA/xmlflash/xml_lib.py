@@ -111,10 +111,34 @@ class DAXML(metaclass=LogBase):
 
     def xread(self) -> Tuple[int,int]:
         while True:
-            hdr = self.usbread()
-            if len(hdr) not in [12,16]:
+            # Frames are 12 bytes (DT_PROTOCOL_FLOW) or 16 bytes (DT_MESSAGE, extra
+            # "priority" field) -- variable length, no way to know which until the
+            # datatype field (bytes 4:8) has actually been read. A single blind
+            # `self.usbread()` used to try to grab the whole thing (or a guessed fixed
+            # size) in one shot on the serial/Windows backend; both approaches either
+            # raced the DA's post-jump boot latency ("Wrong length") or over-read into
+            # whatever followed a 12-byte frame ("Wrong magic"). Fix: read it staged,
+            # with exact explicit lengths every step -- only the very first byte needs
+            # the long/patient wait (DA waking up after jump_da()); everything after
+            # that is data already actively flowing, so explicit-length reads (which
+            # block properly and don't guess) are fast and safe.
+            first = self.usbread()  # resplen=None: waits (bounded) for the 1st byte only
+            if len(first) != 1:
                 self.error("xread: Wrong length")
                 return -1, -1
+            # timeout=0.1 (vs. the 0.02s default floor): these bytes belong to the
+            # same frame we just patiently waited on above, but the VCOM driver's
+            # buffering/timing is unreliable enough (see usbread's resplen=None
+            # comment) that a bare 20ms window between bytes of one frame risked a
+            # spurious short-read/"Wrong length" abort. 100ms is real slack against
+            # that jitter while staying negligible next to the ~2s first-byte wait,
+            # and costs nothing when data's already flowing (read() returns as soon
+            # as the requested bytes arrive, not after the full timeout).
+            rest = self.usbread(11, timeout=0.1)  # rest of the fixed 12-byte prefix, explicit length
+            if len(rest) != 11:
+                self.error("xread: Wrong length")
+                return -1, -1
+            hdr = first + rest
             magic = int.from_bytes(hdr[:4],'little')
             if magic != 0xFEEEEEEF:
                 self.error("xread: Wrong magic")
@@ -122,6 +146,11 @@ class DAXML(metaclass=LogBase):
             datatype = int.from_bytes(hdr[4:8],'little')
             length = int.from_bytes(hdr[8:0xC],'little')
             if datatype == DataType.DT_MESSAGE:
+                extra = self.usbread(4, timeout=0.1)  # the extra "priority" field -> 16 bytes total
+                if len(extra) != 4:
+                    self.error("xread: Wrong length")
+                    return -1, -1
+                hdr = hdr + extra
                 priority = int.from_bytes(hdr[0xC:0x10],'little')
                 length -= 4
                 data = self.usbread(length)

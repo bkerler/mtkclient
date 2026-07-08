@@ -30,6 +30,7 @@ class Port(metaclass=LogBase):
         if serialportname is not None and serialportname != "":
             self.cdc = SerialClass(portconfig=portconfig, loglevel=loglevel, devclass=10)
             self.cdc.setportname(serialportname)
+            self.serialportname = serialportname
         else:
             self.cdc = UsbClass(portconfig=portconfig, loglevel=loglevel, devclass=10)
         self.usbread = self.cdc.usbread

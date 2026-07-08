@@ -51,56 +51,78 @@ CMDS_HELP = {
 
 # ================== Argument Groups ==================
 
+# NOTE: these "shared" options are attached both to the top-level parser and
+# to every subcommand parser (via parents=[base]). argparse dispatches a
+# subcommand by parsing its remaining args into a *fresh* namespace and then
+# copying every attribute from that namespace onto the parent one - which
+# means a subparser's own default silently overwrites a value already set
+# by an option given *before* the subcommand (e.g. `mtk.py --stock r ...`).
+# default=argparse.SUPPRESS stops a subparser from ever re-asserting its
+# default for these dests; the real defaults are applied exactly once, by
+# seeding the initial namespace passed to parser.parse_args() in main().
+SHARED_DEFAULTS = {}
+
+
+def _shared_arg(g, *flags, default=None, **kwargs):
+    dest = kwargs.get('dest')
+    if dest is None:
+        dest = flags[-1].lstrip('-').replace('-', '_')
+    SHARED_DEFAULTS[dest] = default
+    g.add_argument(*flags, default=argparse.SUPPRESS, **kwargs)
+
+
 def add_connection_group(parser):
     g = parser.add_argument_group("Connection & Interface")
-    g.add_argument('--vid', type=str)
-    g.add_argument('--pid', type=str)
-    g.add_argument('--serialport', nargs='?', const='DETECT', default=None,
-                   help='Use serial port (can be DETECT)')
-    g.add_argument('--noreconnect', action='store_true')
-    g.add_argument('--stock', action='store_true', help='use stock da')
-    g.add_argument('--uartloglevel', help='Set uart log level (0=Trace, 2=Normal)')
-    g.add_argument('--logchannel', help='Set log channel ("UART","USB", "BOTH")', default="UART")
-    g.add_argument('--loglevel', help='Set log level (0=Trace, 2=Normal)')
-    g.add_argument('--write_preloader_to_file', action='store_true', help='Dump preloader to file')
-    g.add_argument('--generatekeys', action='store_true', help='Derive HW keys')
-    g.add_argument('--iot', help='Use special mode for iot MT6261/2301', action="store_true",
-                           default=False)
-    g.add_argument('--socid', action='store_true', help='Read Soc ID')
+    _shared_arg(g, '--vid', type=str)
+    _shared_arg(g, '--pid', type=str)
+    _shared_arg(g, '--serialport', nargs='?', const='DETECT',
+                help='Use serial port (can be DETECT)')
+    _shared_arg(g, '--noreconnect', action='store_true', default=False)
+    _shared_arg(g, '--stock', action='store_true', default=False, help='use stock da')
+    _shared_arg(g, '--uartloglevel', help='Set uart log level (0=Trace, 2=Normal)')
+    _shared_arg(g, '--logchannel', help='Set log channel ("UART","USB", "BOTH")', default="UART")
+    _shared_arg(g, '--loglevel', help='Set log level (0=Trace, 2=Normal)')
+    _shared_arg(g, '--write_preloader_to_file', action='store_true', default=False,
+                help='Dump preloader to file')
+    _shared_arg(g, '--generatekeys', action='store_true', default=False, help='Derive HW keys')
+    _shared_arg(g, '--iot', help='Use special mode for iot MT6261/2301', action="store_true",
+                default=False)
+    _shared_arg(g, '--socid', action='store_true', default=False, help='Read Soc ID')
 
 def add_auth_group(parser):
     g = parser.add_argument_group("Authentication")
-    g.add_argument('--auth', type=str, help="Use auth file (auth_sv5.auth)")
-    g.add_argument('--cert', type=str, help="Use cert file")
+    _shared_arg(g, '--auth', type=str, help="Use auth file (auth_sv5.auth)")
+    _shared_arg(g, '--cert', type=str, help="Use cert file")
 
 
 def add_debug_group(parser):
     g = parser.add_argument_group("Debug & Sector")
-    g.add_argument('--debugmode', action='store_true', help='Enable verbose mode')
+    _shared_arg(g, '--debugmode', action='store_true', default=False, help='Enable verbose mode')
 
 def add_exploit_group(parser):
     g = parser.add_argument_group("Bootrom / Preloader Exploit")
-    g.add_argument('--loader', type=str, help='Use specific DA loader, disable autodetection')
-    g.add_argument('--preloader', help='Set the preloader filename for dram config')
-    g.add_argument('--ptype', help='Payload type: amonet, kamakiri, kamakiri2, carbonara')
-    g.add_argument('--var1', help='Set kamakiri specific var1 value')
-    g.add_argument('--uart_addr', help='Set payload uart_addr value')
-    g.add_argument('--da_addr', help='Set a specific da payload addr')
-    g.add_argument('--brom_addr', help='Set a specific brom payload addr')
-    g.add_argument('--mode', help='Set a crash mode (0=dasend1,1=dasend2,2=daread)')
-    g.add_argument('--wdt', help='Set a specific watchdog addr')
-    g.add_argument('--skipwdt', action='store_true', help='Skip wdt init')
-    g.add_argument('--crash', action='store_true', help='Enforce crash if device is in pl mode')
-    g.add_argument('--appid', help='Use app id (hexstring)')
+    _shared_arg(g, '--loader', type=str, help='Use specific DA loader, disable autodetection')
+    _shared_arg(g, '--preloader', help='Set the preloader filename for dram config')
+    _shared_arg(g, '--ptype', help='Payload type: amonet, kamakiri, kamakiri2, carbonara')
+    _shared_arg(g, '--var1', help='Set kamakiri specific var1 value')
+    _shared_arg(g, '--uart_addr', help='Set payload uart_addr value')
+    _shared_arg(g, '--da_addr', help='Set a specific da payload addr')
+    _shared_arg(g, '--brom_addr', help='Set a specific brom payload addr')
+    _shared_arg(g, '--mode', help='Set a crash mode (0=dasend1,1=dasend2,2=daread)')
+    _shared_arg(g, '--wdt', help='Set a specific watchdog addr')
+    _shared_arg(g, '--skipwdt', action='store_true', default=False, help='Skip wdt init')
+    _shared_arg(g, '--crash', action='store_true', default=False,
+                help='Enforce crash if device is in pl mode')
+    _shared_arg(g, '--appid', help='Use app id (hexstring)')
 
 def add_gpt_group(parser):
     g = parser.add_argument_group("GPT & Partition")
-    g.add_argument("--sectorsize", default='0x200', help='Set default sector size')
-    g.add_argument('--gpt-num-part-entries', default='0', help='Set GPT entry count')
-    g.add_argument('--gpt-part-entry-size', default='0', help='Set GPT entry size')
-    g.add_argument('--gpt-part-entry-start-lba', default='0', help='Set GPT entry start lba sector')
-    g.add_argument('--parttype', help='Partition type (user/boot1/rpmb/lu0 etc.)')
-    g.add_argument('--skip', help='Skip partitions (comma separated names)')
+    _shared_arg(g, "--sectorsize", default='0x200', help='Set default sector size')
+    _shared_arg(g, '--gpt-num-part-entries', default='0', help='Set GPT entry count')
+    _shared_arg(g, '--gpt-part-entry-size', default='0', help='Set GPT entry size')
+    _shared_arg(g, '--gpt-part-entry-start-lba', default='0', help='Set GPT entry start lba sector')
+    _shared_arg(g, '--parttype', help='Partition type (user/boot1/rpmb/lu0 etc.)')
+    _shared_arg(g, '--skip', help='Skip partitions (comma separated names)')
 
 
 # ================== Base Parser ==================
@@ -326,7 +348,17 @@ def main():
 
     # ─── Parse & Run ─────────────────────────────────────────────────────
 
-    args = parser.parse_args()
+    # Seed the real defaults for every option shared with subparsers (see
+    # SHARED_DEFAULTS / _shared_arg above) via a pre-populated namespace,
+    # rather than parser.set_defaults(): set_defaults() also overwrites
+    # action.default in place, and since these actions are the exact same
+    # objects shared across the top-level parser and every subparser (via
+    # parents=[base]), that would silently undo the SUPPRESS default
+    # everywhere and reintroduce the bug this is working around. Passing a
+    # pre-filled namespace instead only sets attributes argparse doesn't
+    # already see, so an option's default only "wins" if the option truly
+    # never appeared anywhere on the command line.
+    args = parser.parse_args(namespace=argparse.Namespace(**SHARED_DEFAULTS))
 
     if not args.cmd:
         parser.print_help()
