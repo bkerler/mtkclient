@@ -546,3 +546,21 @@ def write_object(definition, *args):
     obj['object_size'] = len(data)
     obj['raw_data'] = data
     return obj
+
+
+def wait_for_handshake(mtk, error_fn, display=True):
+    res = False
+    maxtries = 100
+    tries = 0
+    while not res and tries < 1000:
+        if mtk.serialportname:
+            res = mtk.port.serial_handshake(maxtries=maxtries)
+        else:
+            res = mtk.port.handshake(maxtries=maxtries)
+        if not res:
+            if display:
+                error_fn("Status: Handshake failed, retrying...")
+                mtk.config.set_gui_status(mtk.config.tr("Status: Handshake failed, retrying..."))
+            mtk.port.close()
+            tries += 1
+    return tries != 1000

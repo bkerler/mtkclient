@@ -1,15 +1,16 @@
 import os
 import sys
-from struct import unpack, pack
+from struct import pack
 
 from mtkclient.config.payloads import PathConfig
 from mtkclient.Library.error import ErrorHandler
 from mtkclient.Library.Hardware.hwcrypto import CryptoSetup, HwCrypto
-from mtkclient.Library.utils import find_binary, do_tcp_keyserver
+from mtkclient.Library.utils import find_binary
 from mtkclient.Library.gui_utils import LogBase, logsetup
 from mtkclient.Library.Hardware.seccfg import SecCfgV4, SecCfgV3
 from binascii import hexlify
 from mtkclient.Library.utils import MTKTee
+from mtkclient.Library.DA.extension_common import DaExtCommonMixin
 import hashlib
 import json
 
@@ -21,7 +22,7 @@ class LCmd:
     NACK = b"\xA5"
 
 
-class LegacyExt(metaclass=LogBase):
+class LegacyExt(DaExtCommonMixin, metaclass=LogBase):
     def __init__(self, mtk, legacy, loglevel):
         self.patched_read = False
         self.pathconfig = PathConfig()
@@ -192,26 +193,8 @@ class LegacyExt(metaclass=LogBase):
             self.custom_write(addr, dat)
         return True
 
-    def writemem(self, addr, data):
-        for i in range(0, len(data), 4):
-            value = data[i:i + 4]
-            while len(value) < 4:
-                value += b"\x00"
-            self.writeregister(addr + i, unpack("<I", value))
-        return True
-
     def custom_write(self, addr, data):
         return self.writemem(addr, data)
-
-    def setotp(self, hwc):
-        otp = None
-        if self.mtk.config.preloader is not None:
-            idx = self.mtk.config.preloader.find(b"\x4D\x4D\x4D\x01\x30")
-            if idx != -1:
-                otp = self.mtk.config.preloader[idx + 0xC:idx + 0xC + 32]
-        if otp is None:
-            otp = 32 * b"\x00"
-        hwc.sej.sej_set_otp(otp)
 
     def cryptosetup(self):
         setup = CryptoSetup()
@@ -294,13 +277,6 @@ class LegacyExt(metaclass=LogBase):
             data = bytearray(self.mtk.daloader.peek(addr=addr, length=0x30, registers=True))
             return data
         return None
-
-    def keyserver(self):
-        hwc = self.cryptosetup()
-        if self.config.chipconfig.dxcc_base is not None:
-            self.info("Starting key server...")
-            do_tcp_keyserver(hwc)
-        return
 
     def generate_keys(self):
         if self.config.hwcode in [0x2601, 0x6572]:

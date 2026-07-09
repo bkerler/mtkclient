@@ -7,6 +7,7 @@ import sys
 import logging
 from enum import Enum
 from mtkclient.Library.gui_utils import LogBase, logsetup
+from mtkclient.Library.utils import wait_for_handshake
 
 
 class META(metaclass=LogBase):
@@ -147,21 +148,7 @@ class META(metaclass=LogBase):
         if display:
             self.info("Status: Waiting for PreLoader VCOM, please reconnect mobile/iot device to brom mode")
             self.config.set_gui_status(self.config.tr("Status: Waiting for connection"))
-        res = False
-        maxtries = 100
-        tries = 0
-        while not res and tries < 1000:
-            if self.mtk.serialportname:
-                res = self.mtk.port.serial_handshake(maxtries=maxtries)
-            else:
-                res = self.mtk.port.handshake(maxtries=maxtries)
-            if not res:
-                if display:
-                    self.error("Status: Handshake failed, retrying...")
-                    self.config.set_gui_status(self.config.tr("Status: Handshake failed, retrying..."))
-                self.mtk.port.close()
-                tries += 1
-        if tries == 1000:
+        if not wait_for_handshake(self.mtk, self.error, display):
             return False
 
         # Get HW code

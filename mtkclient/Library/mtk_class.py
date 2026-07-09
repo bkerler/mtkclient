@@ -38,9 +38,29 @@ class Mtk(metaclass=LogBase):
         if preinit:
             self.setup(self.vid, self.pid, self.interface, serialportname)
 
-    def patch_preloader_security_da1(self, data):
-        patched = False
+    def _apply_preloader_security_patches(self, data, patches):
         data = bytearray(data)
+        patched = False
+        for patchval in patches:
+            if type(patchval[0]) is bytes:
+                idx = find_binary(data, patchval[0])
+                if idx is not None:
+                    data[idx:idx + len(patchval)] = patchval
+                    self.info(f'Patched "{patchval[2]}" in preloader')
+                    patched = True
+            else:
+                pattern = bytes.fromhex(patchval[0])
+                idx = data.find(pattern)
+                if idx != -1:
+                    patch = bytes.fromhex(patchval[1])
+                    data[idx:idx + len(patch)] = patch
+                    self.info(f'Patched "{patchval[2]}" in preloader')
+                    patched = True
+        if not patched:
+            self.warning("Failed to patch preloader security")
+        return data
+
+    def patch_preloader_security_da1(self, data):
         patches = [
             ("A3687BB12846", "0123A3602846", "oppo security"),
             ("B3F5807F01D1", "B3F5807F01D14FF000004FF000007047", "mt6739 c30"),
@@ -54,39 +74,9 @@ class Mtk(metaclass=LogBase):
             ("CCF20709", "4FF00009", "hash_check2"),
             (b"\x14\x2C\xF6.\xFE\xE7", b"\x00\x00\x00\x00\x00\x00", "hash_check3")
         ]
-        i = 0
-        for patchval in patches:
-            if type(patchval[0]) is bytes:
-                idx = find_binary(data, patchval[0])
-                if idx is None:
-                    idx = -1
-                else:
-                    data[idx:idx + len(patchval)] = patchval
-                    self.info(f'Patched "{patchval[2]}" in preloader')
-                    patched = True
-            else:
-                pattern = bytes.fromhex(patchval[0])
-                idx = data.find(pattern)
-                if idx != -1:
-                    patch = bytes.fromhex(patchval[1])
-                    data[idx:idx + len(patch)] = patch
-                    self.info(f'Patched "{patchval[2]}" in preloader')
-                    patched = True
-                    # break
-            i += 1
-        if not patched:
-            self.warning("Failed to patch preloader security")
-        else:
-            # with open("preloader.patched", "wb") as wf:
-            #    wf.write(data)
-            #    print("Patched !")
-            # self.info(f"Patched preloader security: {hex(i)}")
-            data = data
-        return data
+        return self._apply_preloader_security_patches(data, patches)
 
     def patch_preloader_security_da2(self, data):
-        patched = False
-        data = bytearray(data)
         patches = [
             ("A3687BB12846", "0123A3602846", "oppo security"),
             ("B3F5807F01D1", "B3F5807F01D14FF000004FF000007047", "mt6739 c30"),
@@ -97,26 +87,7 @@ class Mtk(metaclass=LogBase):
             ("F0B58BB002AE20250C460746", "002070470000000000205374617274", "sec_img_auth"),
             ("FFC0F3400008BD", "FF4FF0000008BD", "get_vfy_policy")
         ]
-        i = 0
-        for patchval in patches:
-            pattern = bytes.fromhex(patchval[0])
-            idx = data.find(pattern)
-            if idx != -1:
-                patch = bytes.fromhex(patchval[1])
-                data[idx:idx + len(patch)] = patch
-                self.info(f'Patched "{patchval[2]}" in preloader')
-                patched = True
-                # break
-            i += 1
-        if not patched:
-            self.warning("Failed to patch preloader security")
-        else:
-            # with open("preloader.patched", "wb") as wf:
-            #    wf.write(data)
-            #    print("Patched !")
-            # self.info(f"Patched preloader security: {hex(i)}")
-            data = data
-        return data
+        return self._apply_preloader_security_patches(data, patches)
 
     def parse_preloader(self, preloader):
         if isinstance(preloader, str):

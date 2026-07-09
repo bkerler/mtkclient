@@ -46,6 +46,16 @@ class SecCfgV4(metaclass=LogBase):
         return data
         """
 
+    def _custom_sej_hw_unlock(self, data, enxor):
+        return self.custom_sej_hw(encrypt=False,
+                                  data=data,
+                                  cryptmode=sej_cryptmode.UNLOCK,
+                                  otp=self.mtk.config.get_otp(),
+                                  seed=b"12abcdef",
+                                  aeskey=bytes.fromhex(
+                                      "0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000"),
+                                  enxor=enxor)
+
     def parse(self, indata) -> bool:
         rrf = structhelper_io(BytesIO(bytearray(indata)))
         self.magic = rrf.dword()
@@ -79,26 +89,12 @@ class SecCfgV4(metaclass=LogBase):
                                                  encrypt=False,
                                                  samsung=False)
                 """
-                status, dec_hash = self.custom_sej_hw(encrypt=False,
-                                                      data=self.hash,
-                                                      cryptmode=sej_cryptmode.UNLOCK,
-                                                      otp=self.mtk.config.get_otp(),
-                                                      seed=b"12abcdef",
-                                                      aeskey=bytes.fromhex(
-                                                          "0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000"),
-                                                      enxor=False)
+                status, dec_hash = self._custom_sej_hw_unlock(self.hash, enxor=False)
                 # dec_hash = self.protect(dec_hash)
                 if _hash == dec_hash:
                     self.hwtype = "HW"
                 else:
-                    status, dec_hash = self.custom_sej_hw(encrypt=False,
-                                                          data=self.hash,
-                                                          cryptmode=sej_cryptmode.UNLOCK,
-                                                          otp=self.mtk.config.get_otp(),
-                                                          seed=b"12abcdef",
-                                                          aeskey=bytes.fromhex(
-                                                              "0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000"),
-                                                          enxor=True)
+                    status, dec_hash = self._custom_sej_hw_unlock(self.hash, enxor=True)
                     # dec_hash = self.protect(dec_hash)
                     if _hash == dec_hash:
                         self.hwtype = "HWXOR"
@@ -152,23 +148,9 @@ class SecCfgV4(metaclass=LogBase):
         if self.hwtype == "SW":
             enc_hash = self.hwc.sej.sej_sec_cfg_sw(dec_hash, encrypt=True)
         elif self.hwtype == "HW":
-            status, enc_hash = self.custom_sej_hw(encrypt=False,
-                                                  data=dec_hash,
-                                                  cryptmode=sej_cryptmode.UNLOCK,
-                                                  otp=self.mtk.config.get_otp(),
-                                                  seed=b"12abcdef",
-                                                  aeskey=bytes.fromhex(
-                                                      "0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000"),
-                                                  enxor=False)
+            status, enc_hash = self._custom_sej_hw_unlock(dec_hash, enxor=False)
         elif self.hwtype == "HWXOR":
-            status, enc_hash = self.custom_sej_hw(encrypt=False,
-                                                  data=dec_hash,
-                                                  cryptmode=sej_cryptmode.UNLOCK,
-                                                  otp=self.mtk.config.get_otp(),
-                                                  seed=b"12abcdef",
-                                                  aeskey=bytes.fromhex(
-                                                      "0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000"),
-                                                  enxor=True)
+            status, enc_hash = self._custom_sej_hw_unlock(dec_hash, enxor=True)
         elif self.hwtype == "V2":
             enc_hash = self.hwc.sej.sej_sec_cfg_hw(dec_hash, encrypt=True)
         elif self.hwtype == "V3":

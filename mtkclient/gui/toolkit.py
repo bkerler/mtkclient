@@ -171,6 +171,30 @@ class FDialog:
         return None
 
 
+def compute_flash_partition_size(mtk_class, parttype):
+    rpmb = False
+    flashsize = None
+    if parttype == "user":
+        flashsize = mtk_class.daloader.daconfig.storage.flashsize
+    elif parttype == "rpmb":
+        rpmb = True
+        if mtk_class.daloader.daconfig.storage.flashtype == "ufs":
+            flashsize = mtk_class.daloader.daconfig.storage.ufs.lu1_size
+        else:
+            flashsize = mtk_class.daloader.daconfig.storage.emmc.rpmb_size
+    elif parttype == "boot1":
+        if mtk_class.daloader.daconfig.storage.flashtype == "ufs":
+            flashsize = mtk_class.daloader.daconfig.storage.ufs.lu1_size
+        else:
+            flashsize = mtk_class.daloader.daconfig.storage.emmc.boot1size
+    elif parttype == "boot2":
+        if mtk_class.daloader.daconfig.storage.flashtype == "ufs":
+            flashsize = mtk_class.daloader.daconfig.storage.ufs.lu2_size
+        else:
+            flashsize = mtk_class.daloader.daconfig.storage.emmc.boot2size
+    return flashsize, rpmb
+
+
 def trap_exc_during_debug(type_, value, traceback):
     print(print_exception(type_, value, traceback), flush=True)
     # sendToLog("Error: "+str(value))

@@ -2,7 +2,7 @@ import os
 import sys
 from unittest import mock
 from PySide6.QtCore import QObject, Signal
-from mtkclient.gui.toolkit import trap_exc_during_debug, asyncThread, FDialog
+from mtkclient.gui.toolkit import trap_exc_during_debug, asyncThread, FDialog, compute_flash_partition_size
 
 sys.excepthook = trap_exc_during_debug
 
@@ -110,25 +110,8 @@ class WriteFlashWindow(QObject):
 
     def writeFlash(self, parttype):
         self.writeFile = self.fdialog.open(parttype + ".bin")
-        self.parent.Status["rpmb"] = False
-        if parttype == "user":
-            self.flashsize = self.mtkClass.daloader.daconfig.storage.flashsize
-        elif parttype == "rpmb":
-            self.parent.Status["rpmb"] = True
-            if self.mtkClass.daloader.daconfig.storage.flashtype == "ufs":
-                self.flashsize = self.mtkClass.daloader.daconfig.storage.ufs.lu1_size
-            else:
-                self.flashsize = self.mtkClass.daloader.daconfig.storage.emmc.rpmb_size
-        elif parttype == "boot1":
-            if self.mtkClass.daloader.daconfig.storage.flashtype == "ufs":
-                self.flashsize = self.mtkClass.daloader.daconfig.storage.ufs.lu1_size
-            else:
-                self.flashsize = self.mtkClass.daloader.daconfig.storage.emmc.boot1size
-        elif parttype == "boot2":
-            if self.mtkClass.daloader.daconfig.storage.flashtype == "ufs":
-                self.flashsize = self.mtkClass.daloader.daconfig.storage.ufs.lu2_size
-            else:
-                self.flashsize = self.mtkClass.daloader.daconfig.storage.emmc.boot2size
+        self.flashsize, rpmb = compute_flash_partition_size(self.mtkClass, parttype)
+        self.parent.Status["rpmb"] = rpmb
         self.parttype = parttype
         self.parent.Status["totalsize"] = self.flashsize
         self.parent.Status["currentPartitionSize"] = self.flashsize

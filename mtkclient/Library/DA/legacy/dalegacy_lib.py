@@ -70,6 +70,30 @@ class DALegacy(metaclass=LogBase):
             self.mtk.daloader.patch = True
         self.mtk.daloader.lft = LegacyExt(self.mtk, self, loglevel)
 
+    def _update_flashsize_from_type(self):
+        if self.daconfig.storage.flashtype == "nand":
+            self.daconfig.storage.flashsize = self.daconfig.legacy_storage.nand.m_nand_flash_size
+        elif self.daconfig.storage.flashtype == "emmc" or self.daconfig.legacy_storage.emmc.m_emmc_ua_size != 0:
+            self.daconfig.storage.flashsize = self.daconfig.legacy_storage.emmc.m_emmc_ua_size
+            self.daconfig.storage.flashtype = "emmc"
+            if self.daconfig.storage.flashsize == 0:
+                self.daconfig.storage.flashsize = self.daconfig.legacy_storage.sdc.m_sdmmc_ua_size
+        elif self.daconfig.storage.flashtype == "nor":
+            self.daconfig.storage.flashsize = self.daconfig.legacy_storage.nor.m_nor_flash_size
+
+    def _expect_ack_or_fail(self, desc):
+        ack = self.usbread(1)[0]
+        if ack is not self.Rsp.ACK[0]:
+            self.error(f"Error on sending {desc} command, response: {hex(ack)}")
+            exit(1)
+        return ack
+
+    def _fail_on_bad_ack(self, ack, desc):
+        self.usbwrite(b"\xA5")
+        res = unpack("<I", self.usbread(4))[0]
+        self.error(f"Error on sending {desc} command, response: {hex(ack)}, status: {hex(res)}")
+        exit(1)
+
     def boot_to(self, addr, data, display=True, timeout=0.5):
         pass
 
@@ -127,6 +151,16 @@ class DALegacy(metaclass=LogBase):
             flags = 0
             name = ""
 
+        def add_partition(name, size, offset, mask_flags):
+            p = PartitionLegacy()
+            p.name = name
+            p.type = 1
+            p.sector = offset // self.daconfig.pagesize
+            p.sectors = size // self.daconfig.pagesize
+            p.flags = mask_flags
+            p.unique = b""
+            gpt.partentries.append(p)
+
         if self.usbwrite(self.Cmd.SDMMC_READ_PMT_CMD):
             ack = unpack(">B", self.usbread(1))[0]
             if ack == 0x5a:
@@ -140,14 +174,7 @@ class DALegacy(metaclass=LogBase):
                                 size = unpack("<Q", partdata[pos + 0x40:pos + 0x48])[0]
                                 mask_flags = unpack("<Q", partdata[pos + 0x48:pos + 0x50])[0]
                                 offset = unpack("<Q", partdata[pos + 0x50:pos + 0x58])[0]
-                                p = PartitionLegacy()
-                                p.name = partname
-                                p.type = 1
-                                p.sector = offset // self.daconfig.pagesize
-                                p.sectors = size // self.daconfig.pagesize
-                                p.flags = mask_flags
-                                p.unique = b""
-                                gpt.partentries.append(p)
+                                add_partition(partname, size, offset, mask_flags)
                         else:
                             mask_flags = unpack("<Q", partdata[0x48:0x4C])[0]
                             if 0xA > mask_flags > 0:
@@ -157,14 +184,7 @@ class DALegacy(metaclass=LogBase):
                                     size = unpack("<Q", partdata[pos + 0x40:pos + 0x48])[0]
                                     offset = unpack("<Q", partdata[pos + 0x48:pos + 0x50])[0]
                                     mask_flags = unpack("<Q", partdata[pos + 0x50:pos + 0x58])[0]
-                                    p = PartitionLegacy()
-                                    p.name = partname
-                                    p.type = 1
-                                    p.sector = offset // self.daconfig.pagesize
-                                    p.sectors = size // self.daconfig.pagesize
-                                    p.flags = mask_flags
-                                    p.unique = b""
-                                    gpt.partentries.append(p)
+                                    add_partition(partname, size, offset, mask_flags)
                             else:
                                 # 32Bit
                                 for pos in range(0, datalength, 0x4C):
@@ -172,14 +192,7 @@ class DALegacy(metaclass=LogBase):
                                     size = unpack("<Q", partdata[pos + 0x40:pos + 0x44])[0]
                                     offset = unpack("<Q", partdata[pos + 0x44:pos + 0x48])[0]
                                     mask_flags = unpack("<Q", partdata[pos + 0x48:pos + 0x4C])[0]
-                                    p = PartitionLegacy()
-                                    p.name = partname
-                                    p.type = 1
-                                    p.sector = offset // self.daconfig.pagesize
-                                    p.sectors = size // self.daconfig.pagesize
-                                    p.flags = mask_flags
-                                    p.unique = b""
-                                    gpt.partentries.append(p)
+                                    add_partition(partname, size, offset, mask_flags)
                         return partdata, gpt
         return b"", []
 
@@ -402,6 +415,25 @@ class DALegacy(metaclass=LogBase):
                     return False
         return True
 
+    def _sync_baud_handshake(self):
+        for i in range(10):
+            self.usbwrite(b"\xC0")
+            ack = self.usbread(1)
+            if ack == b"\xC0":
+                break
+            time.sleep(0.02)
+        self.usbwrite(b"\x5A")
+        ack = self.usbread(1)
+        if ack == b"\x5A":
+            for i in range(256):
+                loop_val = pack(">B", i)
+                self.usbwrite(loop_val)
+                if self.usbread(1) != loop_val:
+                    return False
+        else:
+            return False
+        return True
+
     def set_speed_iot(self):
         self.usbwrite(b"\x59")
         # ack
@@ -425,23 +457,7 @@ class DALegacy(metaclass=LogBase):
             pass
 
         time.sleep(0.1)
-        for i in range(10):
-            self.usbwrite(b"\xC0")
-            ack = self.usbread(1)
-            if ack == b"\xC0":
-                break
-            time.sleep(0.02)
-        self.usbwrite(b"\x5A")
-        ack = self.usbread(1)
-        if ack == b"\x5A":
-            for i in range(256):
-                loop_val = pack(">B", i)
-                self.usbwrite(loop_val)
-                if self.usbread(1) != loop_val:
-                    return False
-        else:
-            return False
-        return True
+        return self._sync_baud_handshake()
 
     def set_speed(self):
         self.usbwrite(self.Cmd.SPEED_CMD)
@@ -450,23 +466,7 @@ class DALegacy(metaclass=LogBase):
         if ack != b"\x5A":
             return False
         time.sleep(0.2)
-        for i in range(10):
-            self.usbwrite(b"\xC0")
-            ack = self.usbread(1)
-            if ack == b"\xC0":
-                break
-            time.sleep(0.02)
-        self.usbwrite(b"\x5A")
-        ack = self.usbread(1)
-        if ack == b"\x5A":
-            for i in range(256):
-                loop_val = pack(">B", i)
-                self.usbwrite(loop_val)
-                if self.usbread(1) != loop_val:
-                    return False
-        else:
-            return False
-        return True
+        return self._sync_baud_handshake()
 
     def read_flash_info_iot_2523(self):
         v = self.usbread(0x42 - 0x4)
@@ -638,15 +638,7 @@ class DALegacy(metaclass=LogBase):
                 # stage 2
                 if self.brom_send(self.daconfig, self.daconfig.da2, 2):
                     if self.read_flash_info():
-                        if self.daconfig.storage.flashtype == "nand":
-                            self.daconfig.storage.flashsize = self.daconfig.legacy_storage.nand.m_nand_flash_size
-                        elif self.daconfig.storage.flashtype == "emmc" or self.daconfig.legacy_storage.emmc.m_emmc_ua_size != 0:
-                            self.daconfig.storage.flashsize = self.daconfig.legacy_storage.emmc.m_emmc_ua_size
-                            self.daconfig.storage.flashtype = "emmc"
-                            if self.daconfig.storage.flashsize == 0:
-                                self.daconfig.storage.flashsize = self.daconfig.legacy_storage.sdc.m_sdmmc_ua_size
-                        elif self.daconfig.storage.flashtype == "nor":
-                            self.daconfig.storage.flashsize = self.daconfig.legacy_storage.nor.m_nor_flash_size
+                        self._update_flashsize_from_type()
                         self.info("Connected to stage2")
                         speed = self.check_usb_cmd()
                         if speed[0] == 0 and self.daconfig.reconnect:  # 1 = USB High Speed, 2= USB Ultra high speed
@@ -850,15 +842,7 @@ class DALegacy(metaclass=LogBase):
                 else:
                     self.daconfig.storage.flashtype = "nor"
 
-                if self.daconfig.storage.flashtype == "nand":
-                    self.daconfig.storage.flashsize = self.daconfig.legacy_storage.nand.m_nand_flash_size
-                elif self.daconfig.storage.flashtype == "emmc" or self.daconfig.legacy_storage.emmc.m_emmc_ua_size != 0:
-                    self.daconfig.storage.flashsize = self.daconfig.legacy_storage.emmc.m_emmc_ua_size
-                    self.daconfig.storage.flashtype = "emmc"
-                    if self.daconfig.storage.flashsize == 0:
-                        self.daconfig.storage.flashsize = self.daconfig.legacy_storage.sdc.m_sdmmc_ua_size
-                elif self.daconfig.storage.flashtype == "nor":
-                    self.daconfig.storage.flashsize = self.daconfig.legacy_storage.nor.m_nor_flash_size
+                self._update_flashsize_from_type()
                 self.set_speed_iot()
                 return True
             self.error("Init timeout.")
@@ -1104,27 +1088,15 @@ class DALegacy(metaclass=LogBase):
             self.usbwrite(pack(">Q", length))
             progress = 0
             while progress != 100:
-                ack = self.usbread(1)[0]
-                if ack is not self.Rsp.ACK[0]:
-                    self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                    exit(1)
-                ack = self.usbread(1)[0]
-                if ack is not self.Rsp.ACK[0]:
-                    self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                    exit(1)
+                self._expect_ack_or_fail("emmc format")
+                self._expect_ack_or_fail("emmc format")
                 # data
                 self.usbread(4)[0]  # PROGRESS_INIT
                 progress = self.usbread(1)[0]
                 self.usbwrite(b"\x5A")  # Send ACK
                 if progress == 0x64:
-                    ack = self.usbread(1)[0]
-                    if ack is not self.Rsp.ACK[0]:
-                        self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                        exit(1)
-                    ack = self.usbread(1)[0]
-                    if ack is not self.Rsp.ACK[0]:
-                        self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                        exit(1)
+                    self._expect_ack_or_fail("emmc format")
+                    self._expect_ack_or_fail("emmc format")
                     return True
             return False
 
@@ -1146,10 +1118,7 @@ class DALegacy(metaclass=LogBase):
             self.usbwrite(pack(">I", packetsize))
             ack = self.usbread(1)[0]
             if ack is not self.Rsp.ACK[0]:
-                self.usbwrite(b"\xA5")
-                res = unpack("<I", self.usbread(4))[0]
-                self.error(f"Error on sending emmc read flash command, response: {hex(ack)}, status: {hex(res)}")
-                exit(1)
+                self._fail_on_bad_ack(ack, "emmc read flash")
             self.daconfig.readsize = self.daconfig.storage.flashsize
         elif self.daconfig.storage.flashtype == "nand":
             self.usbwrite(self.Cmd.NAND_READPAGE_CMD)  # DF
@@ -1188,10 +1157,7 @@ class DALegacy(metaclass=LogBase):
                 self.usbwrite(pack(">I", packetsize))
             ack = self.usbread(1)[0]
             if ack is not self.Rsp.ACK[0]:
-                self.usbwrite(b"\xA5")
-                res = unpack("<I", self.usbread(4))[0]
-                self.error(f"Error on sending nor readflash command, response: {hex(ack)}, status: {hex(res)}")
-                exit(1)
+                self._fail_on_bad_ack(ack, "nor readflash")
             self.daconfig.readsize = self.daconfig.storage.flashsize
         if filename != "":
             worker = Thread(target=writedata, args=(filename, rq), daemon=True)

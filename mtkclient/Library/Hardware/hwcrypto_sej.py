@@ -261,6 +261,15 @@ class Sej(metaclass=LogBase):
             tmp = ~clockvalue
         return tmp + self.read32(0x10017008) >= timeout * 1000 * 13
 
+    def _clear_hacc_akey(self):
+        self._clear_hacc_akey()
+
+    def _set_hacc_akey(self, key):
+        self._set_hacc_akey(key)
+
+    def _set_hacc_acfg_from_iv(self, iv):
+        self._set_hacc_acfg_from_iv(iv)
+
     def sej_samsung_keygen(self, level):
         for i in range(0, 0xA0 // 4, 0x10 // 4):
             g_UnqKey_Fixed_Pattern[i] = (g_UnqKey_Fixed_Pattern[i] & 0xFFFFFF00) | level
@@ -273,27 +282,13 @@ class Sej(metaclass=LogBase):
 
     def sej_samsung_special(self, aes256: bool = True):
         x = 1
-        self.reg.HACC_AKEY0 = 0
-        self.reg.HACC_AKEY1 = 0
-        self.reg.HACC_AKEY2 = 0
-        self.reg.HACC_AKEY3 = 0
-        self.reg.HACC_AKEY4 = 0
-        self.reg.HACC_AKEY5 = 0
-        self.reg.HACC_AKEY6 = 0
-        self.reg.HACC_AKEY7 = 0
+        self._clear_hacc_akey()
         self.sej_set_otp(g_aes_swotp)
 
         self.reg.HACC_ACON = x
         self.reg.HACC_ACONK = 0
         self.reg.HACC_SECINIT0 = x
-        self.reg.HACC_AKEY0 = 0
-        self.reg.HACC_AKEY1 = 0
-        self.reg.HACC_AKEY2 = 0
-        self.reg.HACC_AKEY3 = 0
-        self.reg.HACC_AKEY4 = 0
-        self.reg.HACC_AKEY5 = 0
-        self.reg.HACC_AKEY6 = 0
-        self.reg.HACC_AKEY7 = 0
+        self._clear_hacc_akey()
         if aes256:
             self.reg.HACC_ACON = 0x23
         else:
@@ -311,14 +306,7 @@ class Sej(metaclass=LogBase):
         return
 
     def SST_SEJ_Derive_AES_128_Key(self, pattern):
-        self.reg.HACC_AKEY0 = 0
-        self.reg.HACC_AKEY1 = 0
-        self.reg.HACC_AKEY2 = 0
-        self.reg.HACC_AKEY3 = 0
-        self.reg.HACC_AKEY4 = 0
-        self.reg.HACC_AKEY5 = 0
-        self.reg.HACC_AKEY6 = 0
-        self.reg.HACC_AKEY7 = 0
+        self._clear_hacc_akey()
         self.reg.HACC_SECINIT0 = 1
         self.reg.HACC_ACON = 3
         self.reg.HACC_ACONK = 0x110
@@ -342,14 +330,7 @@ class Sej(metaclass=LogBase):
         return n | (-(n & 0x80000000))
 
     def SST_SEJ_Derive_AES_Key_KDF_Key(self, pattern, aes256):  # SST_ChipRK_Init
-        self.reg.HACC_AKEY0 = 0
-        self.reg.HACC_AKEY1 = 0
-        self.reg.HACC_AKEY2 = 0
-        self.reg.HACC_AKEY3 = 0
-        self.reg.HACC_AKEY4 = 0
-        self.reg.HACC_AKEY5 = 0
-        self.reg.HACC_AKEY6 = 0
-        self.reg.HACC_AKEY7 = 0
+        self._clear_hacc_akey()
         self.sej_set_otp(g_aes_swotp)
         if not aes256:
             self.reg.HACC_ACON = self.HACC_AES_CHG_BO_OFF | self.HACC_AES_128 | self.HACC_AES_CBC | self.HACC_AES_ENC  # 3
@@ -425,14 +406,7 @@ class Sej(metaclass=LogBase):
             klen = 0x20
         self.write32(0x109E64, klen)
         self.reg.HACC_ACON = (self.reg.HACC_ACON & 0xFFFFFFCF) | klen
-        self.reg.HACC_AKEY0 = 0
-        self.reg.HACC_AKEY1 = 0
-        self.reg.HACC_AKEY2 = 0
-        self.reg.HACC_AKEY3 = 0
-        self.reg.HACC_AKEY4 = 0
-        self.reg.HACC_AKEY5 = 0
-        self.reg.HACC_AKEY6 = 0
-        self.reg.HACC_AKEY7 = 0
+        self._clear_hacc_akey()
 
         if key == 1:
             self.reg.HACC_ACONK |= 0x10
@@ -540,14 +514,7 @@ class Sej(metaclass=LogBase):
         """"""
 
         if attr & 1 != 0:
-            self.reg.HACC_AKEY0 = 0
-            self.reg.HACC_AKEY1 = 0
-            self.reg.HACC_AKEY2 = 0
-            self.reg.HACC_AKEY3 = 0
-            self.reg.HACC_AKEY4 = 0
-            self.reg.HACC_AKEY5 = 0
-            self.reg.HACC_AKEY6 = 0
-            self.reg.HACC_AKEY7 = 0
+            self._clear_hacc_akey()
             if sej_param & 1 != 0:
                 self.reg.HACC_ACONK = self.HACC_AES_BK2C
             else:
@@ -619,38 +586,19 @@ class Sej(metaclass=LogBase):
 
         if attr & 1 == 0:
             if attr & 2 != 0:
-                self.reg.HACC_ACON2 = self.HACC_AES_CLR
-                self.reg.HACC_ACFG0 = iv[0]  # g_AC_CFG
-                self.reg.HACC_ACFG1 = iv[1]
-                self.reg.HACC_ACFG2 = iv[2]
-                self.reg.HACC_ACFG3 = iv[3]
+                self._set_hacc_acfg_from_iv(iv)
             return acon_setting
         else:
-            self.reg.HACC_AKEY0 = key[0]
-            self.reg.HACC_AKEY1 = key[1]
-            self.reg.HACC_AKEY2 = key[2]
-            self.reg.HACC_AKEY3 = key[3]
-            self.reg.HACC_AKEY4 = key[4]
-            self.reg.HACC_AKEY5 = key[5]
-            self.reg.HACC_AKEY6 = key[6]
-            self.reg.HACC_AKEY7 = key[7]
+            self._set_hacc_akey(key)
             if sejparam & 1 == 0:
                 if attr & 2 != 0:
-                    self.reg.HACC_ACON2 = self.HACC_AES_CLR
-                    self.reg.HACC_ACFG0 = iv[0]  # g_AC_CFG
-                    self.reg.HACC_ACFG1 = iv[1]
-                    self.reg.HACC_ACFG2 = iv[2]
-                    self.reg.HACC_ACFG3 = iv[3]
+                    self._set_hacc_acfg_from_iv(iv)
                 return 0
             elif m_sst_type & 8 == 0:
                 if m_sst_type & 2 == 0:
                     self.reg.HACC_ACONK = self.HACC_AES_BK2C
                 if attr & 2 != 0:
-                    self.reg.HACC_ACON2 = self.HACC_AES_CLR
-                    self.reg.HACC_ACFG0 = iv[0]  # g_AC_CFG
-                    self.reg.HACC_ACFG1 = iv[1]
-                    self.reg.HACC_ACFG2 = iv[2]
-                    self.reg.HACC_ACFG3 = iv[3]
+                    self._set_hacc_acfg_from_iv(iv)
                 return 0
             if sejparam & 8 != 0:
                 self.reg.HACC_SECINIT0_new &= 0xFFFFFFFD
@@ -661,11 +609,7 @@ class Sej(metaclass=LogBase):
                 if m_sst_type & 2 == 0:
                     self.reg.HACC_ACONK = self.HACC_AES_BK2C
                 if attr & 2 != 0:
-                    self.reg.HACC_ACON2 = self.HACC_AES_CLR
-                    self.reg.HACC_ACFG0 = iv[0]  # g_AC_CFG
-                    self.reg.HACC_ACFG1 = iv[1]
-                    self.reg.HACC_ACFG2 = iv[2]
-                    self.reg.HACC_ACFG3 = iv[3]
+                    self._set_hacc_acfg_from_iv(iv)
                 return 0
             self.reg.HACC_ACON2 |= 0x40000000
             current_clock = self.get_world_clock_value()
@@ -683,22 +627,11 @@ class Sej(metaclass=LogBase):
         if iv is not None:
             acon_setting |= self.HACC_AES_CBC  # 0
 
-        self.reg.HACC_AKEY0 = key[0]
-        self.reg.HACC_AKEY1 = key[1]
-        self.reg.HACC_AKEY2 = key[2]
-        self.reg.HACC_AKEY3 = key[3]
-        self.reg.HACC_AKEY4 = key[4]
-        self.reg.HACC_AKEY5 = key[5]
-        self.reg.HACC_AKEY6 = key[6]
-        self.reg.HACC_AKEY7 = key[7]
+        self._set_hacc_akey(key)
         self.reg.HACC_ACON2 = self.HACC_AES_CLR
 
         if attr & 2 != 0:
-            self.reg.HACC_ACON2 = self.HACC_AES_CLR
-            self.reg.HACC_ACFG0 = iv[0]  # g_AC_CFG
-            self.reg.HACC_ACFG1 = iv[1]
-            self.reg.HACC_ACFG2 = iv[2]
-            self.reg.HACC_ACFG3 = iv[3]
+            self._set_hacc_acfg_from_iv(iv)
 
         if attr & 8:
             self.reg.HACC_SECINIT0 |= 2
@@ -776,26 +709,12 @@ class Sej(metaclass=LogBase):
         else:
             self.sst_init_4g(attr=attr, iv=_iv, keylen=key.key_len, key=key.key, m_sst_type=m_sst_type)
             buf2 = self.sej_aes_hw_internal_4g(buf, encrypt=encrypt)
-        self.reg.HACC_AKEY0 = 0
-        self.reg.HACC_AKEY1 = 0
-        self.reg.HACC_AKEY2 = 0
-        self.reg.HACC_AKEY3 = 0
-        self.reg.HACC_AKEY4 = 0
-        self.reg.HACC_AKEY5 = 0
-        self.reg.HACC_AKEY6 = 0
-        self.reg.HACC_AKEY7 = 0
+        self._clear_hacc_akey()
         return buf2
 
     def sej_terminate(self):
         self.reg.HACC_ACON2 = self.HACC_AES_CLR
-        self.reg.HACC_AKEY0 = 0
-        self.reg.HACC_AKEY1 = 0
-        self.reg.HACC_AKEY2 = 0
-        self.reg.HACC_AKEY3 = 0
-        self.reg.HACC_AKEY4 = 0
-        self.reg.HACC_AKEY5 = 0
-        self.reg.HACC_AKEY6 = 0
-        self.reg.HACC_AKEY7 = 0
+        self._clear_hacc_akey()
 
     def SEJ_V3_Init(self, ben=True, iv=None, legacy=False):
         # 0x335 = MT6737M/MT6735G

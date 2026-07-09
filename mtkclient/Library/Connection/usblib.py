@@ -146,38 +146,6 @@ class UsbClass(DeviceClass):
     def set_fast_mode(self, enabled):
         self.fast = bool(enabled)
 
-    def verify_data(self, data, pre="RX:"):
-        if self.__logger.level == logging.DEBUG:
-            frame = inspect.currentframe()
-            stack_trace = traceback.format_stack(frame)
-            td = []
-            for trace in stack_trace:
-                if "verify_data" not in trace and "Port" not in trace:
-                    td.append(trace)
-            self.debug(td[:-1])
-
-        if isinstance(data, bytes) or isinstance(data, bytearray):
-            if data[:5] == b"<?xml":
-                try:
-                    rdata = b""
-                    for line in data.split(b"\n"):
-                        try:
-                            self.debug(pre + line.decode('utf-8'))
-                            rdata += line + b"\n"
-                        except Exception:
-                            v = hexlify(line)
-                            self.debug(pre + v.decode('utf-8'))
-                    return rdata
-                except Exception as err:
-                    self.debug(str(err))
-                    pass
-            if logging.DEBUG >= self.__logger.level:
-                self.debug(pre + hexlify(data).decode('utf-8'))
-        else:
-            if logging.DEBUG >= self.__logger.level:
-                self.debug(pre + hexlify(data).decode('utf-8'))
-        return data
-
     def get_interface_count(self):
         if self.vid is not None:
             self.device = usb.core.find(idVendor=self.vid, idProduct=self.pid, backend=self.backend)

@@ -13,6 +13,7 @@ from mtkclient.Library.Auth.sla import generate_brom_sla_challenge
 from mtkclient.Library.settings import HwParam
 from mtkclient.Library.gui_utils import LogBase, logsetup, progress
 from mtkclient.Library.error import ErrorHandler
+from mtkclient.Library.utils import wait_for_handshake
 from mtkclient.config.brom_config import DAmodes
 
 USBDL_BIT_EN = 0x00000001  # 1: download bit enabled
@@ -154,21 +155,7 @@ class Preloader(metaclass=LogBase):
 
         self.info("Status: Waiting for PreLoader VCOM, please reconnect mobile/iot device to brom mode")
         self.config.set_gui_status(self.config.tr("Status: Waiting for connection"))
-        res = False
-        maxtries = 100
-        tries = 0
-        while not res and tries < 1000:
-            if self.mtk.serialportname:
-                res = self.mtk.port.serial_handshake(maxtries=maxtries)
-            else:
-                res = self.mtk.port.handshake(maxtries=maxtries)
-            if not res:
-                if display:
-                    self.error("Status: Handshake failed, retrying...")
-                    self.config.set_gui_status(self.config.tr("Status: Handshake failed, retrying..."))
-                self.mtk.port.close()
-                tries += 1
-        if tries == 1000:
+        if not wait_for_handshake(self.mtk, self.error, display):
             return False
 
         if not self.echo(self.Cmd.GET_HW_CODE.value):  # 0xFD

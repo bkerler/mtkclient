@@ -281,13 +281,15 @@ class DaHandler(metaclass=LogBase):
             if display:
                 print(f"Dumped Backup GPT to {sfilename}")
 
-    def da_read_partition(self, partitionname, parttype="user", display: bool = True):
-        rpartition = None
+    def _find_partition(self, partitionname, parttype):
         gpttable = self.mtk.daloader.get_partition_data(parttype=parttype)
         for gptentry in gpttable:
-            if hasattr(gptentry,"name") and gptentry.name.lower() == partitionname.lower():
-                rpartition = gptentry
-                break
+            if hasattr(gptentry, "name") and gptentry.name.lower() == partitionname.lower():
+                return gptentry
+        return None
+
+    def da_read_partition(self, partitionname, parttype="user", display: bool = True):
+        rpartition = self._find_partition(partitionname, parttype)
         if rpartition is not None:
             if display:
                 self.info(f'Dumping partition "{rpartition.name}"')
@@ -298,12 +300,7 @@ class DaHandler(metaclass=LogBase):
         return b""
 
     def da_write_partition(self, partitionname, data: bytes = None, parttype="user", display: bool = True):
-        rpartition = None
-        gpttable = self.mtk.daloader.get_partition_data(parttype=parttype)
-        for gptentry in gpttable:
-            if hasattr(gptentry,"name") and gptentry.name.lower() == partitionname.lower():
-                rpartition = gptentry
-                break
+        rpartition = self._find_partition(partitionname, parttype)
         if rpartition is not None:
             if display:
                 self.info(f'Writing partition "{rpartition.name}"')
@@ -524,6 +521,30 @@ class DaHandler(metaclass=LogBase):
                             return
         self.error("Error: Couldn't detect footer partition.")
 
+    def _write_partition_to_sector(self, rpartition, partfilename, parttype):
+        if self.mtk.daloader.writeflash(addr=rpartition.sector * self.config.pagesize,
+                                        length=rpartition.sectors * self.config.pagesize,
+                                        filename=partfilename,
+                                        parttype=parttype):
+            print(
+                f"Wrote {partfilename} to sector {str(rpartition.sector)} with " +
+                f"sector count {str(rpartition.sectors)}.")
+        else:
+            print(
+                f"Failed to write {partfilename} to sector {str(rpartition.sector)} with " +
+                f"sector count {str(rpartition.sectors)}.")
+
+    def _write_stream_to_pos(self, pos, size, partfilename, parttype, partitionname=None):
+        kwargs = {"addr": pos, "length": size, "filename": partfilename, "parttype": parttype}
+        if partitionname is not None:
+            kwargs["partitionname"] = partitionname
+        if self.mtk.daloader.writeflash(**kwargs):
+            print(f"Wrote {partfilename} to sector {str(pos // 0x200)} with " +
+                  f"sector count {str(size)}.")
+        else:
+            print(f"Failed to write {partfilename} to sector {str(pos // 0x200)} with " +
+                  f"sector count {str(size)}.")
+
     def da_write(self, parttype: str, filenames: list, partitions: list):
         if len(partitions) != len(filenames):
             self.error("You need to gives as many filenames as given partitions.")
@@ -543,17 +564,7 @@ class DaHandler(metaclass=LogBase):
                 res = self.mtk.daloader.detect_partition(partition, parttype)
                 if res[0]:
                     rpartition = res[1]
-                    if self.mtk.daloader.writeflash(addr=rpartition.sector * self.config.pagesize,
-                                                    length=rpartition.sectors * self.config.pagesize,
-                                                    filename=partfilename,
-                                                    parttype=parttype):
-                        print(
-                            f"Wrote {partfilename} to sector {str(rpartition.sector)} with " +
-                            f"sector count {str(rpartition.sectors)}.")
-                    else:
-                        print(
-                            f"Failed to write {partfilename} to sector {str(rpartition.sector)} with " +
-                            f"sector count {str(rpartition.sectors)}.")
+                    self._write_partition_to_sector(rpartition, partfilename, parttype)
                 else:
                     self.error(f"Error: Couldn't detect partition: {partition}\nAvailable partitions:")
                     for rpartition in res[1]:
@@ -562,13 +573,7 @@ class DaHandler(metaclass=LogBase):
             pos = 0
             for partfilename in filenames:
                 size = os.stat(partfilename).st_size
-                if self.mtk.daloader.writeflash(addr=pos, length=size, filename=partfilename,
-                                                parttype=parttype):
-                    print(f"Wrote {partfilename} to sector {str(pos // 0x200)} with " +
-                          f"sector count {str(size)}.")
-                else:
-                    print(f"Failed to write {partfilename} to sector {str(pos // 0x200)} with " +
-                          f"sector count {str(size)}.")
+                self._write_stream_to_pos(pos, size, partfilename, parttype)
                 psize = size // 0x200 * 0x200
                 if size % 0x200 != 0:
                     psize += 0x200
@@ -599,17 +604,7 @@ class DaHandler(metaclass=LogBase):
                 res = self.mtk.daloader.detect_partition(partition, parttype)
                 if res[0]:
                     rpartition = res[1]
-                    if self.mtk.daloader.writeflash(addr=rpartition.sector * self.config.pagesize,
-                                                    length=rpartition.sectors * self.config.pagesize,
-                                                    filename=partfilename,
-                                                    parttype=parttype):
-                        print(
-                            f"Wrote {partfilename} to sector {str(rpartition.sector)} with " +
-                            f"sector count {str(rpartition.sectors)}.")
-                    else:
-                        print(
-                            f"Failed to write {partfilename} to sector {str(rpartition.sector)} with " +
-                            f"sector count {str(rpartition.sectors)}.")
+                    self._write_partition_to_sector(rpartition, partfilename, parttype)
                 else:
                     self.error(f"Error: Couldn't detect partition: {partition}\n, skipping")
         else:
@@ -619,14 +614,7 @@ class DaHandler(metaclass=LogBase):
                 partition = os.path.basename(partfilename)
                 partition = os.path.splitext(partition)[0]
                 self.info(f"Writing filename {partfilename}")
-                if self.mtk.daloader.writeflash(addr=pos, length=size, filename=partfilename,
-                                                partitionname=partition,
-                                                parttype=parttype):
-                    print(f"Wrote {partfilename} to sector {str(pos // 0x200)} with " +
-                          f"sector count {str(size)}.")
-                else:
-                    print(f"Failed to write {partfilename} to sector {str(pos // 0x200)} with " +
-                          f"sector count {str(size)}.")
+                self._write_stream_to_pos(pos, size, partfilename, parttype, partitionname=partition)
                 psize = size // 0x200 * 0x200
                 if size % 0x200 != 0:
                     psize += 0x200

@@ -349,6 +349,25 @@ class Main(metaclass=LogBase):
                 wwf.close()
                 self.info(f"Data from {hex(addr)} with size of {hex(length)} was written to " + filename)
 
+    def _run_da_command_batch(self, mtk, commands, da_handler, directory, parser, config,
+                              close_on_connect_failure):
+        mtk = da_handler.connect(mtk, directory)
+        if mtk is None:
+            if close_on_connect_failure:
+                self.close()
+            return
+        mtk = da_handler.configure_da(mtk)
+        if mtk is not None:
+            for rcmd in commands:
+                self.args = parser.parse_args(rcmd.split(" "))
+                ArgHandler(self.args, config)
+                cmd = self.args.cmd
+                da_handler.handle_da_cmds(mtk, cmd, self.args)
+                sys.stdout.flush()
+                sys.stderr.flush()
+        else:
+            self.close()
+
     def run(self, parser):
         try:
             if self.args.debugmode:
@@ -432,39 +451,14 @@ class Main(metaclass=LogBase):
                 return
             commands = open(self.args.script, "r").read().splitlines()
             da_handler = DaHandler(mtk, loglevel)
-            mtk = da_handler.connect(mtk, directory)
-            if mtk is None:
-                return
-            mtk = da_handler.configure_da(mtk)
-            if mtk is not None:
-                for rcmd in commands:
-                    self.args = parser.parse_args(rcmd.split(" "))
-                    ArgHandler(self.args, config)
-                    cmd = self.args.cmd
-                    da_handler.handle_da_cmds(mtk, cmd, self.args)
-                    sys.stdout.flush()
-                    sys.stderr.flush()
-            else:
-                self.close()
+            self._run_da_command_batch(mtk, commands, da_handler, directory, parser, config,
+                                       close_on_connect_failure=False)
         elif cmd == "multi":
             # Split the commands in the multi argument
             commands = self.args.commands.split(';')
             da_handler = DaHandler(mtk, loglevel)
-            mtk = da_handler.connect(mtk, directory)
-            if mtk is None:
-                self.close()
-                return
-            mtk = da_handler.configure_da(mtk)
-            if mtk is not None:
-                for rcmd in commands:
-                    self.args = parser.parse_args(rcmd.split(" "))
-                    ArgHandler(self.args, config)
-                    cmd = self.args.cmd
-                    da_handler.handle_da_cmds(mtk, cmd, self.args)
-                    sys.stdout.flush()
-                    sys.stderr.flush()
-            else:
-                self.close()
+            self._run_da_command_batch(mtk, commands, da_handler, directory, parser, config,
+                                       close_on_connect_failure=True)
         elif cmd == "dumpbrom":
             if mtk.preloader.init():
                 rmtk = mtk.crasher()
