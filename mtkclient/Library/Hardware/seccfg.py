@@ -127,8 +127,8 @@ class SecCfgV4(metaclass=LogBase):
         LKS_LOCK = 0x04
         LKS_VERIFIED = 0x05
         LKS_CUSTOM = 0x06
-        LKCS_UNLOCK = 0x01
-        LKCS_LOCK = 0x02
+        DM_VERITY_STATUS_OK = 0x00
+        DM_VERITY_GENERAL_ERROR = 0x01
         SBOOT_RUNTIME_OFF = 0
         SBOOT_RUNTIME_ON  = 1
         """
