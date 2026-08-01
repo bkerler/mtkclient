@@ -20,7 +20,7 @@ class SecCfgV4(metaclass=LogBase):
         self.seccfg_ver = None
         self.seccfg_size = None
         self.lock_state = None
-        self.critical_lock_state = None
+        self.dm_verity_state = None
         self.sboot_runtime = None
         self.endflag = 0x45454545
         self.hash = b""
@@ -52,7 +52,7 @@ class SecCfgV4(metaclass=LogBase):
         self.seccfg_ver = rrf.dword()
         self.seccfg_size = rrf.dword()
         self.lock_state = rrf.dword()
-        self.critical_lock_state = rrf.dword()
+        self.dm_verity_state = rrf.dword()
         self.sboot_runtime = rrf.dword()
         self.endflag = rrf.dword()
         rrf.seek(self.seccfg_size - 0x20)
@@ -61,7 +61,7 @@ class SecCfgV4(metaclass=LogBase):
             self.error("Unknown V4 seccfg structure !")
             return False
         seccfg_data = pack("<IIIIIII", self.magic, self.seccfg_ver, self.seccfg_size, self.lock_state,
-                           self.critical_lock_state, self.sboot_runtime, 0x45454545)
+                           self.dm_verity_state, self.sboot_runtime, 0x45454545)
         _hash = hashlib.sha256(seccfg_data).digest()
         dec_hash = self.hwc.sej.sej_sec_cfg_sw(self.hash, False)
         if _hash == dec_hash:
@@ -141,12 +141,10 @@ class SecCfgV4(metaclass=LogBase):
             return False, "Device is already unlocked"
         if lockflag == "unlock":
             self.lock_state = 3
-            self.critical_lock_state = 1
         elif lockflag == "lock":
             self.lock_state = 1
-            self.critical_lock_state = 0
         seccfg_data = pack("<IIIIIII", self.magic, self.seccfg_ver, self.seccfg_size, self.lock_state,
-                           self.critical_lock_state, self.sboot_runtime, 0x45454545)
+                           self.dm_verity_state, self.sboot_runtime, 0x45454545)
         dec_hash = hashlib.sha256(seccfg_data).digest()
         enc_hash = b""
         if self.hwtype == "SW":
