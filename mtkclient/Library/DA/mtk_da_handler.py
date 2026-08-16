@@ -129,8 +129,15 @@ class DaHandler(metaclass=LogBase):
                 mtk.reinited = True
                 return mtk
         if mtk.config.target_config is None:
-            self.info("Please disconnect, start mtkclient and reconnect.")
-            return None
+            self.warning("Target config is still unset after the initial connection attempt; retrying preloader initialization.")
+            try:
+                if getattr(mtk, "preloader", None) is not None:
+                    mtk.preloader.init(directory=directory)
+            except Exception as err:
+                self.warning(f"Preloader retry failed: {err}")
+            if mtk.config.target_config is None:
+                self.info("Please disconnect, start mtkclient and reconnect.")
+                return None
         return mtk
 
     def configure_da(self, mtk):
