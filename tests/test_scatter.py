@@ -112,12 +112,15 @@ class ScatterParserTest(unittest.TestCase):
         self.assertIsInstance(self.scatter.get("boot_a").is_download, bool)
 
     def test_region_to_parttype(self):
-        # preloader's EMMC_BOOT1_BOOT2 region must map to "boot" (DA parttype 10,
-        # which wraps it in a BRLYT boot header), NOT a raw "boot1" write.
-        self.assertEqual(self.scatter.get("preloader").parttype, "boot")
+        self.assertEqual(self.scatter.get("preloader").parttype, "boot1")
         self.assertEqual(self.scatter.get("boot_a").parttype, "user")
         self.assertTrue(self.scatter.get("preloader").is_boot_region)
         self.assertTrue(self.scatter.get("boot_a").is_user_region)
+
+    def test_is_preloader(self):
+        # the SV5_BL_BIN bootloader must be recognised so da_ws wraps it
+        self.assertTrue(self.scatter.get("preloader").is_preloader)
+        self.assertFalse(self.scatter.get("boot_a").is_preloader)
 
     def test_download_partitions_filter(self):
         # is_download AND has a real file. pgpt (no file) and userdata

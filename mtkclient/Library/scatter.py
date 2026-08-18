@@ -54,10 +54,10 @@ REGION_TO_PARTTYPE = {
     "EMMC_BOOT1": "boot1",
     "EMMC_BOOT_2": "boot2",
     "EMMC_BOOT2": "boot2",
-    # Preloader (SV5_BL_BIN). "boot" -> DA parttype MTK_DA_EMMC_BOOT1_BOOT2, which
-    # makes the DA build the EMMC_BOOT/BRLYT wrapper so the BROM can boot boot1.
-    # A raw "boot1" write of the bare preloader leaves the device stuck in BROM.
-    "EMMC_BOOT1_BOOT2": "boot",
+    # Preloader (SV5_BL_BIN) lives in boot1. NOTE: it must NOT be written as the
+    # bare preloader -- da_ws wraps it in an EMMC_BOOT/BRLYT boot header first
+    # (see preloader_boot.wrap_preloader), otherwise the BROM can't boot boot1.
+    "EMMC_BOOT1_BOOT2": "boot1",
     "EMMC_RPMB": "rpmb",
     "EMMC_GP1": "gp1",
     "EMMC_GP2": "gp2",
@@ -108,7 +108,12 @@ class ScatterPartition:
 
     @property
     def is_boot_region(self) -> bool:
-        return self.parttype in ("boot", "boot1", "boot2")
+        return self.parttype in ("boot1", "boot2")
+
+    @property
+    def is_preloader(self) -> bool:
+        """The bootloader that goes in boot1 wrapped in an EMMC_BOOT header."""
+        return self.type == "SV5_BL_BIN" or (self.name or "").lower() == "preloader"
 
     def start_lba(self, sectorsize: int) -> int:
         return self.linear_start_addr // sectorsize

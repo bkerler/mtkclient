@@ -887,8 +887,18 @@ class DaHandler(metaclass=LogBase):
         allok = True
         for p, path in plan:
             size = os.stat(path).st_size
-            if p.is_boot_region:
-                # preloader / boot1 / boot2: write at the scatter address in that region
+            if p.is_preloader:
+                # The preloader must be wrapped in an EMMC_BOOT/BRLYT boot header
+                # before it goes to boot1, otherwise the BROM won't boot it.
+                from mtkclient.Library.preloader_boot import wrap_preloader
+                with open(path, "rb") as rf:
+                    wrapped = wrap_preloader(rf.read())
+                self.info(f"Writing {p.name} -> boot1 @ 0x0 "
+                          f"(EMMC_BOOT-wrapped, {len(wrapped)} bytes)")
+                ok = self.mtk.daloader.writeflash(addr=0, length=len(wrapped),
+                                                  filename="", wdata=wrapped, parttype="boot1")
+            elif p.is_boot_region:
+                # other boot-region images: write at the scatter address in that region
                 self.info(f"Writing {p.name} -> {p.parttype} @ {hex(p.linear_start_addr)}")
                 ok = self.mtk.daloader.writeflash(addr=p.linear_start_addr, length=size,
                                                   filename=path, parttype=p.parttype)

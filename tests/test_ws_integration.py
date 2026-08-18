@@ -81,6 +81,7 @@ class FakeDaLoader:
                    wdata=None, display=True):
         self.writes.append(SimpleNamespace(addr=addr, length=length, parttype=parttype,
                                            has_wdata=wdata is not None,
+                                           wdata=bytes(wdata) if wdata is not None else None,
                                            filename=filename))
         return True
 
@@ -140,15 +141,19 @@ class DownloadOnlyTest(WsTestBase):
         for w in dl.writes:
             by_parttype.setdefault(w.parttype, []).append(w)
 
-        # preloader -> "boot" (DA wraps it in a BRLYT header) at scatter addr 0
-        self.assertIn("boot", by_parttype)
-        self.assertEqual(by_parttype["boot"][0].addr, 0x0)
+        # preloader -> boot1 at addr 0, EMMC_BOOT-wrapped (so it arrives via wdata)
+        self.assertIn("boot1", by_parttype)
+        pre = by_parttype["boot1"][0]
+        self.assertEqual(pre.addr, 0x0)
+        self.assertTrue(pre.has_wdata)
+        self.assertTrue(pre.wdata.startswith(b"EMMC_BOOT"))
+        self.assertEqual(pre.wdata[0x200:0x205], b"BRLYT")
 
         # boot_a and super -> user, at the *device* partition's sector address
         user_addrs = sorted(w.addr for w in by_parttype["user"])
         self.assertEqual(user_addrs, [0x8000, 0x48000])
-        # no GPT written in download-only mode
-        self.assertFalse(any(w.has_wdata for w in dl.writes))
+        # the only wdata write in download-only mode is the wrapped preloader
+        self.assertEqual([w for w in dl.writes if w.has_wdata], [pre])
 
     def test_missing_partition_reports_failure(self):
         # boot_a exists but super is absent from device GPT
@@ -179,7 +184,8 @@ class RepartitionTest(WsTestBase):
         ok = h.da_ws(self.scatter_path, repartition=True)
         self.assertTrue(ok)
 
-        gpt_writes = [w for w in dl.writes if w.has_wdata]
+        # GPT writes go to the user area via wdata (preloader wdata is parttype boot1)
+        gpt_writes = [w for w in dl.writes if w.has_wdata and w.parttype == "user"]
         # exactly two GPT writes: primary (addr 0) and backup (near end)
         self.assertEqual(len(gpt_writes), 2)
         self.assertEqual(gpt_writes[0].addr, 0)
@@ -192,8 +198,10 @@ class RepartitionTest(WsTestBase):
         user_addrs = sorted(w.addr for w in dl.writes
                             if w.parttype == "user" and not w.has_wdata)
         self.assertEqual(user_addrs, [0x8000, 0x48000])
-        # preloader still routed to the wrapping "boot" parttype
-        self.assertTrue(any(w.parttype == "boot" for w in dl.writes))
+        # preloader written to boot1, EMMC_BOOT-wrapped
+        pre = [w for w in dl.writes if w.parttype == "boot1"]
+        self.assertEqual(len(pre), 1)
+        self.assertTrue(pre[0].wdata.startswith(b"EMMC_BOOT"))
 
     def test_repartition_gpt_is_valid(self):
         # capture the primary blob and confirm it parses as a real GPT
@@ -203,7 +211,7 @@ class RepartitionTest(WsTestBase):
         orig = dl.writeflash
 
         def capturing(addr, length, filename="", offset=0, parttype=None, wdata=None, display=True):
-            if wdata is not None and addr == 0:
+            if wdata is not None and addr == 0 and parttype == "user":
                 captured["primary"] = bytes(wdata)
             return orig(addr, length, filename, offset, parttype, wdata, display)
 
