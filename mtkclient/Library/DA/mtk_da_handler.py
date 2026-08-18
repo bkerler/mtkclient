@@ -1109,6 +1109,20 @@ class DaHandler(metaclass=LogBase):
                       f"{'UPDATE' if repartition else 'ALL'}.")
             return da.flash_all(resolver, update=repartition)
 
+        # NAND / NOR / COMBO use a PMT (not a GPT), BMT bad-block relocation, a
+        # NAND-specific boot header and page addressing -- all handled inside the
+        # DA. Delegate every write to the DA download command; the host does not
+        # rebuild the table.
+        if not scatter.is_gpt_storage:
+            if not da_download:
+                self.info(f"{scatter.storage}: delegating writes to the DA "
+                          f"(PMT/BMT/boot header are DA-managed).")
+            da_download = True
+            if repartition:
+                self.info(f"{scatter.storage} uses a DA-managed PMT; the host does "
+                          f"not rebuild it -- flashing images only.")
+                repartition = False
+
         # Build the flash plan and verify every referenced image exists first.
         plan = []
         missing = []
@@ -1165,23 +1179,30 @@ class DaHandler(metaclass=LogBase):
         for p, path in plan:
             size = os.stat(path).st_size
             if p.is_preloader:
-                # The preloader must be wrapped in a boot-region header (EMMC_BOOT/
-                # BRLYT) before it goes to boot1, otherwise the BROM won't boot it.
-                # This software wrapping is verified for eMMC only; other storage
-                # raises, so we fail cleanly instead of writing a bricking header.
-                from mtkclient.Library.preloader_boot import wrap_preloader
                 storage = self.mtk.daloader.daconfig.storage.flashtype or "emmc"
-                with open(path, "rb") as rf:
-                    try:
-                        wrapped = wrap_preloader(rf.read(), storage=storage)
-                    except ValueError as err:
-                        self.error(f"Skipping preloader: {err}")
-                        allok = False
-                        continue
-                self.info(f"Writing {p.name} -> boot1 @ 0x0 "
-                          f"(boot-header-wrapped, {len(wrapped)} bytes)")
-                ok = self.mtk.daloader.writeflash(addr=0, length=len(wrapped),
-                                                  filename="", wdata=wrapped, parttype="boot1")
+                da_obj = getattr(self.mtk.daloader, "da", None)
+                if da_download and hasattr(da_obj, "download"):
+                    # Let the DA build the boot header (works for eMMC/UFS/NAND/
+                    # COMBO). The DA reads the raw GFH preloader and wraps it.
+                    self.info(f"Writing {p.name} -> boot1 via DA (DA builds header)")
+                    ok = da_obj.download(addr=0, length=size, filename=path,
+                                         parttype="boot1")
+                else:
+                    # Host-side boot header (EMMC_BOOT/BRLYT for eMMC/UFS). NAND/NOR
+                    # raise, so we fail cleanly rather than write a bricking header.
+                    from mtkclient.Library.preloader_boot import wrap_preloader
+                    with open(path, "rb") as rf:
+                        try:
+                            wrapped = wrap_preloader(rf.read(), storage=storage)
+                        except ValueError as err:
+                            self.error(f"Skipping preloader: {err} (use --da_download to "
+                                       f"let the DA build the header)")
+                            allok = False
+                            continue
+                    self.info(f"Writing {p.name} -> boot1 @ 0x0 "
+                              f"(boot-header-wrapped, {len(wrapped)} bytes)")
+                    ok = self.mtk.daloader.writeflash(addr=0, length=len(wrapped),
+                                                      filename="", wdata=wrapped, parttype="boot1")
             elif p.is_boot_region:
                 # other boot-region images: write at the scatter address in that region
                 self.info(f"Writing {p.name} -> {p.parttype} @ {hex(p.linear_start_addr)}")

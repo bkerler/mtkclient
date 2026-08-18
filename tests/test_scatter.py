@@ -285,8 +285,19 @@ class ScatterValidationTest(unittest.TestCase):
         s = Scatter(self._write(SCATTER_TEXT))
         self.assertEqual(len(s.partitions), 4)
 
-    def test_nand_storage_rejected(self):
+    def test_nand_storage_accepted_but_not_gpt(self):
+        # NAND parses (flashed via the DA path), but is not GPT storage.
         text = SCATTER_TEXT.replace("storage: EMMC", "storage: NAND")
+        s = Scatter(self._write(text))
+        self.assertEqual(s.storage, "NAND")
+        self.assertFalse(s.is_gpt_storage)
+
+    def test_emmc_ufs_are_gpt_storage(self):
+        s = Scatter(self._write(SCATTER_TEXT))
+        self.assertTrue(s.is_gpt_storage)
+
+    def test_unknown_storage_rejected(self):
+        text = SCATTER_TEXT.replace("storage: EMMC", "storage: BOGUS")
         with self.assertRaises(ValueError):
             Scatter(self._write(text))
 

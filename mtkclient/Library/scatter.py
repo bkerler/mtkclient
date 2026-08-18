@@ -75,7 +75,22 @@ REGION_TO_PARTTYPE = {
     "UFS_LU1": "boot2",
     "UFS_LU2": "user",
     "UFS_LU0_LU1": "boot1",  # preloader region; is_preloader drives the wrapping
+    # NAND / NOR / COMBO. These are a single address space (the DA collapses
+    # them to the main area); the boot region holds the preloader. NAND/NOR are
+    # PMT/BMT/page-addressed, so their scatters must be flashed via the DA
+    # (download / FLASH-ALL), not the host-side GPT path -- see da_ws.
+    "NAND_BOOT1": "boot1",
+    "NAND_GP1": "user",
+    "NAND_GP2": "user",
+    "NAND_GP3": "user",
+    "NAND_NCT": "user",
+    "COMBO_BOOT": "boot1",
+    "NOR_BOOT": "boot1",
 }
+
+# Storage classes flashed via the host-side GPT path vs delegated to the DA.
+GPT_STORAGE = ("EMMC", "UFS")
+DA_ONLY_STORAGE = ("NAND", "NOR", "COMBO")
 
 
 class ScatterPartition:
@@ -211,12 +226,14 @@ class Scatter:
                              f"recognised SP Flash Tool (YAML) scatter file "
                              f"(XML scatters are not supported)")
         storage = str(self.storage or "").upper()
-        if storage and storage not in ("EMMC", "UFS"):
-            # NAND/NOR/COMBO use page addressing + PMT/BMT, a separate subsystem
-            # from this GPT/byte-addressed flow; refuse rather than mis-flash.
-            raise ValueError(f"{self.filename}: storage {self.storage!r} is not supported by "
-                             f"the ws scatter flow (EMMC and UFS only); NAND/NOR/COMBO use "
-                             f"PMT/BMT + page addressing, which this flow does not implement.")
+        if storage and storage not in GPT_STORAGE + DA_ONLY_STORAGE:
+            raise ValueError(f"{self.filename}: unrecognised storage {self.storage!r} "
+                             f"(known: {', '.join(GPT_STORAGE + DA_ONLY_STORAGE)}).")
+
+    @property
+    def is_gpt_storage(self) -> bool:
+        """EMMC/UFS use a GPT (host-side path); NAND/NOR/COMBO use PMT (DA path)."""
+        return str(self.storage or "").upper() in GPT_STORAGE
         ver = str(self.config_version or "")
         if ver and not (ver.upper().startswith("V1") or ver.upper().startswith("V2")):
             self.log_unknown_version(ver)
