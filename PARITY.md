@@ -38,7 +38,7 @@ We therefore support two modes:
 | Download-Only layout-change gate | refuse if GPT changed | `da_ws_layout_matches` | ✅ tested |
 | `DOWNLOAD` command (secured DAs) | yes | `cmd_download` / `--da_download` | ⚠ implemented; needs device |
 | v6 `FLASH-ALL` / `FLASH-UPDATE` | yes | `xml_lib.flash_all` + resolver | ⚠ implemented; needs a v6 device |
-| UFS | yes | implemented (LU0/LU1=boot, LU2=user, LU0_LU1=preloader; UFS_BOOT header; 4096 sectors) | ⚠ implemented; boot header structural, needs a UFS device |
+| UFS | yes | implemented (LU0/LU1=boot, LU2=user, LU0_LU1=preloader; UFS_BOOT header; 4096 sectors) | ⚠ implemented; boot header structural, end-to-end mock-tested; boot header structural, validate on a UFS device |
 | NAND / NOR / COMBO (PMT, BMT, page addr) | yes (legacy DA) | not implemented | ❌ separate subsystem: legacy DA + PMT + BMT + page addressing, not the GPT/byte-addressed flow (SPFT uses a different code path too) |
 | Secured (SBC/DAA/SLA) devices | yes (signed DA + SLA) | via mtkclient patched DA + `--da_download` | ⚠ needs device |
 
