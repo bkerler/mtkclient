@@ -210,9 +210,16 @@ class Scatter:
                              f"recognised SP Flash Tool (YAML) scatter file "
                              f"(XML scatters are not supported)")
         storage = str(self.storage or "").upper()
-        if storage and storage not in ("EMMC", "UFS"):
-            raise ValueError(f"{self.filename}: unsupported storage {self.storage!r}; "
-                             f"only EMMC and UFS scatters are supported (not NAND/NOR/COMBO)")
+        if storage and storage != "EMMC":
+            # The ws host-side flow is verified only for eMMC. UFS LU->role
+            # mapping is unverified (and mtkclient's own storage.py is
+            # inconsistent: v5 maps "user"->LU0, v6 maps "user"->LU2), and
+            # NAND/NOR/COMBO need page addressing + PMT/BMT. Refuse rather than
+            # risk a destructive mis-flash; these belong on the DA download /
+            # FLASH-ALL path (see da_ws "Known limitations").
+            raise ValueError(f"{self.filename}: storage {self.storage!r} is not supported by "
+                             f"the ws scatter flow yet (eMMC only); UFS/NAND/NOR/COMBO need the "
+                             f"DA-driven download/FLASH-ALL path.")
         ver = str(self.config_version or "")
         if ver and not (ver.upper().startswith("V1") or ver.upper().startswith("V2")):
             self.log_unknown_version(ver)

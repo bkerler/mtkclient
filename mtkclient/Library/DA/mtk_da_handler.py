@@ -946,18 +946,20 @@ class DaHandler(metaclass=LogBase):
         device's existing partitions. With repartition=True (Firmware Upgrade):
         rebuild the GPT from the scatter first, then flash by scatter address.
 
-        Known limitations vs SP Flash Tool (which delegates these to the DA and,
-        on v6, drives everything from an XML scatter it sends to the device):
-          - Uses WRITE_DATA; works on a patched DA (mtkclient's default) but a
-            stock/secured DA may reject it ("cmd_write_data is not allowed").
-            The DA "download" command is the proper path and also drives the
-            DA's own sparse/format logic; not implemented here.
-          - Sparse images are expanded host-side (da_ws_write_image); a resized
-            userdata is NOT reformatted to the new size (Android resizes on first
-            boot).
-          - No post-write per-image checksum verification (v6 scatter_checksum).
-          - Device-unique regions are not backed up before a repartition (SP
-            Flash Tool's FLASH-UPDATE backup_folder); we only guard/warn.
+        NOTE: this is the HOST-SIDE path (eMMC + patched DA only). SP Flash Tool
+        instead delegates to the DA -- v5 via the DOWNLOAD command (opcode
+        0x010001), v6 by sending the scatter as XML and issuing FLASH-ALL /
+        FLASH-UPDATE. The DA then builds the boot header, writes PGPT/SGPT,
+        resizes (DEV_DA_SET_DYNAMIC_PARTITION_SPACE), expands sparse images,
+        backs up + restores PROTECTED regions, and verifies per-image checksums
+        -- and it works on secured (SBC/DAA/SLA) and UFS/NAND devices, which this
+        WRITE_DATA path cannot. Exact SPFT parity requires driving those DA
+        commands (in progress), not extending this host-side reimplementation.
+
+        Current host-side gaps vs SPFT: WRITE_DATA is refused by a stock/secured
+        DA and cannot do DA-side sparse ("sparse image is not support in this
+        stage!"); resized userdata is not reformatted; no per-image checksum
+        verify; no PROTECTED backup/restore; eMMC only.
         """
         from mtkclient.Library.scatter import Scatter
 
