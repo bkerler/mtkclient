@@ -43,7 +43,8 @@ We therefore support two modes:
 | Secured (SBC/DAA/SLA) devices | yes (signed DA + SLA) | via mtkclient patched DA + `--da_download` | ⚠ needs device |
 
 Legend: ✅ implemented & unit-tested · ⚠ implemented, needs on-hardware
-validation · ❌ intentionally refused (safe) pending device access.
+validation. Every storage class and DA mode SP Flash Tool supports now has a
+code path -- there are no unimplemented (refused) features.
 
 ## Validation status
 
