@@ -61,8 +61,9 @@ GFH_MAGIC = b"MMM\x01"
 GFH_MAX_SIZE_OFF = 0x24
 
 # The boot-region identifier that sits at offset 0 differs per storage.
-BOOT_MAGIC = {"emmc": b"EMMC_BOOT", "ufs": b"UFS_BOOT",
-              "sdmmc": b"SDMMC_BOOT", "combo": b"COMBO_BOOT", "sf": b"SF_BOOT"}
+# (Confirmed in the DA: EMMC_BOOT, UFS_BOOT, SDMMC_BOOT, COMBO_BOOT, NOR_BOOT.)
+BOOT_MAGIC = {"emmc": b"EMMC_BOOT", "ufs": b"UFS_BOOT", "sdmmc": b"SDMMC_BOOT",
+              "combo": b"COMBO_BOOT", "nor": b"NOR_BOOT", "sf": b"SF_BOOT"}
 KNOWN_BOOT_MAGICS = tuple(BOOT_MAGIC.values())
 
 # eMMC is verified byte-for-byte against a real k62v1_64_bsp dump. UFS uses the
