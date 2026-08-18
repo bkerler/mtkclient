@@ -20,6 +20,24 @@ except ImportError:
     FUSE = None
 
 
+def ws_file_resolver(scatterfile, basedir):
+    """Build a resolver mapping a path the DA requests (during FLASH-ALL) to a
+    local file. The DA references files by the paths inside the scatter (e.g.
+    'D:/scatter.xml', 'D:/boot.img'); we serve them by basename from basedir,
+    and any 'scatter' request from the actual scatter file.
+    """
+    scatter_names = {"scatter.xml", os.path.basename(scatterfile).lower()}
+
+    def resolve(requested):
+        base = str(requested).replace("\\", "/").split("/")[-1]
+        if base.lower() in scatter_names or base.lower().startswith("scatter"):
+            return scatterfile
+        cand = os.path.join(basedir, base)
+        return cand if os.path.exists(cand) else None
+
+    return resolve
+
+
 class efuse_runtime_def:
     addr = None
     mask = None
@@ -1052,6 +1070,17 @@ class DaHandler(metaclass=LogBase):
         scatter = Scatter(scatterfile)
         basedir = os.path.dirname(os.path.abspath(scatterfile))
         sectorsize = self.config.pagesize or 0x200
+
+        # On a v6 (XML) DA, delegate the whole flash to the DA's FLASH-ALL /
+        # FLASH-UPDATE, exactly like SP Flash Tool v6 (the DA builds the boot
+        # header, GPT, resizes, unsparses, backs up PROTECTED regions, verifies
+        # checksums). Only reachable on a real v6 device.
+        da = getattr(self.mtk.daloader, "da", None)
+        if hasattr(da, "flash_all"):
+            resolver = ws_file_resolver(scatterfile, basedir)
+            self.info("v6 XML DA detected: delegating to DA FLASH-"
+                      f"{'UPDATE' if repartition else 'ALL'}.")
+            return da.flash_all(resolver, update=repartition)
 
         # Build the flash plan and verify every referenced image exists first.
         plan = []

@@ -588,6 +588,56 @@ class DAXML(metaclass=LogBase):
             self.error("No download data received. Aborting.")
             return False
 
+    def flash_all(self, resolver, update: bool = False, display: bool = True):
+        """Drive the DA's FLASH-ALL / FLASH-UPDATE (the SP Flash Tool v6 flow).
+
+        Instead of the host writing sectors, the DA parses the scatter and pulls
+        each file it needs from us; the DA then builds the boot header, writes
+        PGPT/SGPT, resizes, expands sparse, backs up/restores PROTECTED regions
+        and verifies checksums itself. `resolver(requested_path)` maps a path the
+        DA asks for (scatter or an image) to a local file path.
+
+        EXPERIMENTAL: requires a v6 (XML) DA and an XML scatter; the exact
+        FILE-SIZE response and scatter format need validation on a v6 device.
+        """
+        cmd = self.cmd.cmd_flash_update() if update else self.cmd.cmd_flash_all()
+        if not self.xsend(data=cmd):
+            return False
+        if self.get_response() != "OK":
+            return False
+        while True:
+            what, result = self.get_command_result()
+            if what == "CMD:END":
+                return result in ("OK", "")
+            if what == "CMD:START":
+                continue
+            if what == "CMD:FILE-SYS-OPERATION":
+                # DA asks for a property of a file (e.g. FILE-SIZE).
+                local = resolver(result.file_path)
+                if result.key == "FILE-SIZE" and local:
+                    self.ack_value(os.path.getsize(local))
+                else:
+                    self.ack_value(0)
+                continue
+            if what == "CMD:DOWNLOAD-FILE":
+                local = resolver(result.source_file)
+                if not local:
+                    self.error(f"DA requested unknown file {result.source_file}")
+                    return False
+                with open(local, "rb") as rf:
+                    data = rf.read()
+                if not self.upload(result, data, display=display):
+                    return False
+                continue
+            if what == "CMD:UPLOAD-FILE":
+                # DA hands us data (e.g. a backup); store it via the resolver.
+                local = resolver(result.target_file)
+                self.download_raw(result, filename=local or "", display=display)
+                continue
+            if "ERR" in str(result):
+                self.error(str(result))
+                return False
+
     def boot_to(self, addr, data, display=True, timeout=0.5):
         result = self.send_command(self.cmd.cmd_boot_to(at_addr=addr, jmp_addr=addr, length=len(data)))
         if type(result) is DwnFile:
