@@ -35,6 +35,7 @@ We therefore support two modes:
 | Dynamic partitions (otp/flashinfo) | DA | placed from device GPT | ✅ tested |
 | Per-image checksum verify | DA storage checksum | via DA `DOWNLOAD` (`--da_download`) | ⚠ needs device |
 | `skip_pt_operate` / `resize_check` flags | yes | yes | ✅ tested |
+| Download-Only layout-change gate | refuse if GPT changed | `da_ws_layout_matches` | ✅ tested |
 | `DOWNLOAD` command (secured DAs) | yes | `cmd_download` / `--da_download` | ⚠ implemented; needs device |
 | v6 `FLASH-ALL` / `FLASH-UPDATE` | yes | `xml_lib.flash_all` + resolver | ⚠ implemented; needs a v6 device |
 | UFS | yes | refused (mapping unverified) | ❌ needs a real UFS scatter/device |

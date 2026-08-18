@@ -216,5 +216,35 @@ class RepartitionSafetyTest(unittest.TestCase):
         self.assertEqual(fmts[0].length, ud.sectors * SECTOR)
 
 
+class LayoutGateTest(unittest.TestCase):
+    """da_ws_layout_matches gates Download-Only when the device table differs."""
+
+    def setUp(self):
+        from mtkclient.Library.scatter import Scatter
+        self.Scatter = Scatter
+
+    def _scatter(self, nvram_addr):
+        path = write_scatter(nvram_addr)
+        self.addCleanup(os.remove, path)
+        return self.Scatter(path)
+
+    def _handler(self, gpt_bytes):
+        dl = FakeDaLoader(gpt_bytes)
+        return make_handler(dl)
+
+    def test_matches_when_same(self):
+        # scatter nvram at device offset (64 sectors -> 0x8000 bytes)
+        h = self._handler(device_gpt())
+        self.assertTrue(h.da_ws_layout_matches(self._scatter(nvram_addr=64 * SECTOR)))
+
+    def test_refuses_when_moved(self):
+        h = self._handler(device_gpt())
+        self.assertFalse(h.da_ws_layout_matches(self._scatter(nvram_addr=0x9000)))
+
+    def test_allows_when_no_device_gpt(self):
+        h = self._handler(b"")  # fresh device, no GPT
+        self.assertTrue(h.da_ws_layout_matches(self._scatter(nvram_addr=64 * SECTOR)))
+
+
 if __name__ == "__main__":
     unittest.main()

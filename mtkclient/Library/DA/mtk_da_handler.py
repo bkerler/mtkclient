@@ -1038,6 +1038,33 @@ class DaHandler(metaclass=LogBase):
         return self.mtk.daloader.writeflash(addr=part_addr, length=size, filename=path,
                                             parttype="user")
 
+    def da_ws_layout_matches(self, scatter) -> bool:
+        """True if every fixed scatter partition sits at the same offset on the
+        device. Used to gate Download-Only, matching SP Flash Tool's refusal when
+        the on-device table differs. Returns True (allow) when there's no device
+        GPT to compare (fresh device) or it can't be read.
+        """
+        from mtkclient.Library.gpt_builder import parse_existing_layout
+        sectorsize = self.config.pagesize or 0x200
+        try:
+            existing = self.mtk.daloader.readflash(addr=0, length=0x8000, filename="",
+                                                   parttype="user", display=False)
+        except Exception:
+            return True
+        layout = parse_existing_layout(existing or b"", sectorsize)
+        if not layout:
+            return True
+        for p in scatter.gpt_partitions():
+            cur = layout.get((p.name or "").lower())
+            if cur is None:
+                self.warning(f"Partition {p.name} in the scatter is not on the device.")
+                return False
+            if cur[0] != p.linear_start_addr // sectorsize:
+                self.warning(f"Partition {p.name} is at device sector {cur[0]}, "
+                             f"scatter wants {p.linear_start_addr // sectorsize}.")
+                return False
+        return True
+
     def da_ws(self, scatterfile: str, repartition: bool = False, skip_preloader: bool = False,
               allow_data_loss: bool = False, da_download: bool = False):
         """Flash a full firmware described by a SP Flash Tool scatter file.
@@ -1124,6 +1151,15 @@ class DaHandler(metaclass=LogBase):
                                           backup_dir=backup_dir):
                 self.close()
                 return False
+        elif not self.da_ws_layout_matches(scatter):
+            # SP Flash Tool refuses a Download-Only when the scatter's partition
+            # table differs from the device ("GPT/PMT Changed ... FW upgrade or
+            # Format all first"). Do the same instead of writing to a stale table.
+            self.error("Scatter layout differs from the device's partition table; "
+                       "re-run with --repartition (Firmware Upgrade) to lay down the "
+                       "new table first.")
+            self.close()
+            return False
 
         allok = True
         for p, path in plan:
