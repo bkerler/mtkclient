@@ -31,7 +31,8 @@ BASIC_DATA_TYPE_GUID = UUID("EBD0A0A2-B9E5-4433-87C0-68B6B72699C7")
 
 def guid_to_bytes(value) -> bytes:
     """Accept a uuid.UUID, a GUID string, or raw 16 bytes; return 16 mixed-endian bytes."""
-    if isinstance(value, bytes):
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        value = bytes(value)
         if len(value) != 16:
             raise ValueError("GUID bytes must be 16 long")
         return value

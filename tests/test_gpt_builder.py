@@ -52,6 +52,20 @@ class GuidHelperTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             guid_to_bytes(b"\x00" * 15)
 
+    def test_bytearray_and_memoryview_accepted(self):
+        # readflash returns a bytearray, so parse_existing_entries hands GUID
+        # slices back as bytearray/memoryview -- these must be accepted.
+        raw = bytes(range(16))
+        self.assertEqual(guid_to_bytes(bytearray(raw)), raw)
+        self.assertEqual(guid_to_bytes(memoryview(raw)), raw)
+
+    def test_entry_accepts_bytearray_guids(self):
+        e = GptPartitionEntry("x", 64, 128,
+                              type_guid=bytearray(range(16)),
+                              unique_guid=bytearray(range(16, 32)))
+        self.assertIsInstance(e.type_guid, bytes)
+        self.assertIsInstance(e.unique_guid, bytes)
+
 
 class GPTBuildTest(unittest.TestCase):
     def setUp(self):
