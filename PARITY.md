@@ -28,7 +28,7 @@ We therefore support two modes:
 |---|---|---|---|
 | Scatter parse (regions, operation_type, flags) | yes | yes | ✅ tested (exact enum strings) |
 | GPT build (PMBR/PGPT/SGPT, CRCs) | DA `[GPT_DA]` | host `gpt_builder` | ✅ tested (round-trips through the parser) |
-| Preloader boot header (EMMC_BOOT/BRLYT) | DA | host `preloader_boot` | ✅ eMMC byte-exact vs real dump; UFS/NAND via DA only |
+| Preloader boot header (EMMC_BOOT/BRLYT) | DA | host `preloader_boot` | ✅ eMMC byte-exact; UFS structural (UFS_BOOT); NAND via DA only |
 | Sparse images | DA `[UNSPARSE]` | host expand **or** DA (`--da_download`) | ✅ host tested; DA path needs device |
 | NEEDRESIZE (grow userdata) + auto-format | DA | host (erase-block aligned) + `formatflash` | ✅ tested |
 | PROTECTED/BINREGION backup + restore | DA `backup_folder`/`__NODL_` | host read→backup→restore | ✅ tested |
@@ -38,8 +38,8 @@ We therefore support two modes:
 | Download-Only layout-change gate | refuse if GPT changed | `da_ws_layout_matches` | ✅ tested |
 | `DOWNLOAD` command (secured DAs) | yes | `cmd_download` / `--da_download` | ⚠ implemented; needs device |
 | v6 `FLASH-ALL` / `FLASH-UPDATE` | yes | `xml_lib.flash_all` + resolver | ⚠ implemented; needs a v6 device |
-| UFS | yes | refused (mapping unverified) | ❌ needs a real UFS scatter/device |
-| NAND / NOR / COMBO (PMT, BMT, page addr) | yes | refused | ❌ out of scope (separate subsystem) |
+| UFS | yes | implemented (LU0/LU1=boot, LU2=user, LU0_LU1=preloader; UFS_BOOT header; 4096 sectors) | ⚠ implemented; boot header structural, needs a UFS device |
+| NAND / NOR / COMBO (PMT, BMT, page addr) | yes (legacy DA) | not implemented | ❌ separate subsystem: legacy DA + PMT + BMT + page addressing, not the GPT/byte-addressed flow (SPFT uses a different code path too) |
 | Secured (SBC/DAA/SLA) devices | yes (signed DA + SLA) | via mtkclient patched DA + `--da_download` | ⚠ needs device |
 
 Legend: ✅ implemented & unit-tested · ⚠ implemented, needs on-hardware

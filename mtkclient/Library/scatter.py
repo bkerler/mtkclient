@@ -67,13 +67,14 @@ REGION_TO_PARTTYPE = {
     "EMMC_GP_3": "gp3",
     "EMMC_GP_4": "gp4",
     "EMMC_USER": "user",
-    # UFS regions. LU mapping follows the MTK convention (LU0=user, LU1/LU2=boot,
-    # LU0_LU1=preloader region) -- UNVERIFIED against a real UFS scatter; UFS
-    # preloader wrapping is refused anyway (see preloader_boot.VERIFIED_STORAGE).
-    "UFS_LU0": "user",
-    "UFS_LU1": "boot1",
-    "UFS_LU2": "boot2",
-    "UFS_LU0_LU1": "boot1",
+    # UFS regions. The DA models UFS as UFS_LU_BOOT1 / UFS_LU_BOOT2 / UFS_LU_USER
+    # (UFSPartitionType BOOT1=1, BOOT2=2, USER=3 -> physical LU0/LU1/LU2). So the
+    # boot LUs are LU0/LU1 and the big data LU (where the GPT lives) is LU2; the
+    # preloader spans the two boot LUs (UFS_LU0_LU1).
+    "UFS_LU0": "boot1",
+    "UFS_LU1": "boot2",
+    "UFS_LU2": "user",
+    "UFS_LU0_LU1": "boot1",  # preloader region; is_preloader drives the wrapping
 }
 
 
@@ -210,16 +211,12 @@ class Scatter:
                              f"recognised SP Flash Tool (YAML) scatter file "
                              f"(XML scatters are not supported)")
         storage = str(self.storage or "").upper()
-        if storage and storage != "EMMC":
-            # The ws host-side flow is verified only for eMMC. UFS LU->role
-            # mapping is unverified (and mtkclient's own storage.py is
-            # inconsistent: v5 maps "user"->LU0, v6 maps "user"->LU2), and
-            # NAND/NOR/COMBO need page addressing + PMT/BMT. Refuse rather than
-            # risk a destructive mis-flash; these belong on the DA download /
-            # FLASH-ALL path (see da_ws "Known limitations").
+        if storage and storage not in ("EMMC", "UFS"):
+            # NAND/NOR/COMBO use page addressing + PMT/BMT, a separate subsystem
+            # from this GPT/byte-addressed flow; refuse rather than mis-flash.
             raise ValueError(f"{self.filename}: storage {self.storage!r} is not supported by "
-                             f"the ws scatter flow yet (eMMC only); UFS/NAND/NOR/COMBO need the "
-                             f"DA-driven download/FLASH-ALL path.")
+                             f"the ws scatter flow (EMMC and UFS only); NAND/NOR/COMBO use "
+                             f"PMT/BMT + page addressing, which this flow does not implement.")
         ver = str(self.config_version or "")
         if ver and not (ver.upper().startswith("V1") or ver.upper().startswith("V2")):
             self.log_unknown_version(ver)

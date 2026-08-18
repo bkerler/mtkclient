@@ -292,27 +292,29 @@ class Storage(metaclass=LogBase):
                     "\"gp1\",\"gp2\",\"gp3\",\"gp4\",\"rpmb\"")
                 return []
         elif storage == DaStorage.MTK_DA_STORAGE_UFS:
+            # UFS type -> physical LU: BOOT1(1)=LU0, BOOT2(2)=LU1, USER(3)=LU2,
+            # RPMB(4)=LU3. flashsize must be the matching LU's size.
             if parttype == "user" or parttype is None:
                 if not xml:
                     parttype = UFSPartitionType.USER
-                    self.flashsize = self.ufs.lu0_size
+                    self.flashsize = self.ufs.lu2_size
                 else:
                     parttype = "UFS-LUA2"
                     self.flashsize = self.ufs.lu2_size
             elif parttype == "boot1":
                 if not xml:
                     parttype = UFSPartitionType.BOOT1
-                    self.flashsize = self.ufs.lu1_size
+                    self.flashsize = self.ufs.lu0_size
                 else:
                     parttype = "UFS-LUA0"
                     self.flashsize = self.ufs.lu0_size
             elif parttype == "boot2":
                 if not xml:
                     parttype = UFSPartitionType.BOOT2
-                    self.flashsize = self.ufs.lu2_size
+                    self.flashsize = self.ufs.lu1_size
                 else:
                     parttype = "UFS-LUA1"
-                    self.flashsize = self.ufs.lu0_size
+                    self.flashsize = self.ufs.lu1_size
             elif parttype == "rpmb":
                 if not xml:
                     parttype = UFSPartitionType.RPMB

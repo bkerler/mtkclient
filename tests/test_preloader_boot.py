@@ -55,10 +55,19 @@ class WrapTest(unittest.TestCase):
             wrap_preloader(b"\x00" * (DEFAULT_REGION_SIZE + 1))
 
     def test_unverified_storage_refused(self):
-        # UFS/NAND must not get a made-up header that could brick the device
-        for storage in ("ufs", "nand", "nor"):
+        # NAND/NOR use a different boot layout -- must not get an eMMC/UFS header
+        for storage in ("nand", "nor"):
             with self.assertRaises(ValueError):
                 wrap_preloader(b"MMM\x01" + b"\x00" * 0x100, storage=storage)
+
+    def test_ufs_header(self):
+        # UFS uses UFS_BOOT magic, 4096-byte dev_rw_unit, device type 0x0C
+        hdr = build_boot_header("ufs")
+        self.assertEqual(hdr[0:8], b"UFS_BOOT")
+        self.assertEqual(unpack("<I", hdr[0x10:0x14])[0], 0x1000)  # dev_rw_unit
+        self.assertEqual(unpack("<I", hdr[0x218:0x21C])[0], 0x0001000C)  # dev_type UFS | gfh<<16
+        out = wrap_preloader(b"MMM\x01" + b"\x00" * 0x100, storage="ufs")
+        self.assertTrue(out.startswith(b"UFS_BOOT"))
 
     def test_is_wrapped_recognises_other_magics(self):
         from mtkclient.Library.preloader_boot import is_wrapped

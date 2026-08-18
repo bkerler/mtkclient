@@ -157,8 +157,11 @@ class ScatterParserTest(unittest.TestCase):
         self.assertEqual(pt("EMMC_GP_1"), "gp1")
         self.assertEqual(pt("EMMC_GP_4"), "gp4")
         self.assertEqual(pt("EMMC_RPMP"), "rpmb")
+        # UFS: LU0/LU1 are the boot LUs, LU2 is the data LU, LU0_LU1 = preloader
+        self.assertEqual(pt("UFS_LU0"), "boot1")
+        self.assertEqual(pt("UFS_LU1"), "boot2")
+        self.assertEqual(pt("UFS_LU2"), "user")
         self.assertEqual(pt("UFS_LU0_LU1"), "boot1")
-        self.assertEqual(pt("UFS_LU0"), "user")
         # the wrong spellings must NOT be mapped (they'd fall back to user)
         self.assertNotIn("EMMC_GP1", REGION_TO_PARTTYPE)
         self.assertNotIn("EMMC_RPMB", REGION_TO_PARTTYPE)
@@ -286,6 +289,18 @@ class ScatterValidationTest(unittest.TestCase):
         text = SCATTER_TEXT.replace("storage: EMMC", "storage: NAND")
         with self.assertRaises(ValueError):
             Scatter(self._write(text))
+
+    def test_ufs_scatter_accepted_and_mapped(self):
+        # a UFS scatter must parse; preloader region UFS_LU0_LU1 -> boot,
+        # data region UFS_LU2 -> user.
+        text = (SCATTER_TEXT.replace("storage: EMMC", "storage: UFS")
+                .replace("region: EMMC_BOOT1_BOOT2", "region: UFS_LU0_LU1")
+                .replace("region: EMMC_USER", "region: UFS_LU2"))
+        s = Scatter(self._write(text))
+        self.assertEqual(s.storage, "UFS")
+        self.assertTrue(s.get("preloader").is_preloader)
+        self.assertTrue(s.get("preloader").is_boot_region)
+        self.assertEqual(s.get("boot_a").parttype, "user")
 
 
 class RealScatterTest(unittest.TestCase):

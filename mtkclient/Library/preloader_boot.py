@@ -65,12 +65,13 @@ BOOT_MAGIC = {"emmc": b"EMMC_BOOT", "ufs": b"UFS_BOOT",
               "sdmmc": b"SDMMC_BOOT", "combo": b"COMBO_BOOT", "sf": b"SF_BOOT"}
 KNOWN_BOOT_MAGICS = tuple(BOOT_MAGIC.values())
 
-# The software-built header is only verified byte-for-byte against a real
-# eMMC (k62v1_64_bsp) dump. UFS/NAND/NOR use different block sizes, magics and
-# descriptor fields, so we refuse them here rather than emit a wrong header
-# that would brick the device. (The proper cross-storage path is the DA
-# "download" command, which builds the boot header on the device itself.)
-VERIFIED_STORAGE = ("emmc",)
+# eMMC is verified byte-for-byte against a real k62v1_64_bsp dump. UFS uses the
+# same BRLYT structure with the UFS_BOOT magic, a 4096-byte dev_rw_unit and
+# device type 0x0C (GfhFlashDev::Ufs) -- built structurally here; the region
+# size still comes from the preloader's GFH max_size. NAND/NOR use a different
+# boot layout and are not built here. (The DA "download" command builds the
+# header on-device and is the fully storage-agnostic path.)
+VERIFIED_STORAGE = ("emmc", "ufs")
 
 
 def is_wrapped(data: bytes) -> bool:
