@@ -140,9 +140,9 @@ class DownloadOnlyTest(WsTestBase):
         for w in dl.writes:
             by_parttype.setdefault(w.parttype, []).append(w)
 
-        # preloader -> boot1 at its scatter address (0)
-        self.assertIn("boot1", by_parttype)
-        self.assertEqual(by_parttype["boot1"][0].addr, 0x0)
+        # preloader -> "boot" (DA wraps it in a BRLYT header) at scatter addr 0
+        self.assertIn("boot", by_parttype)
+        self.assertEqual(by_parttype["boot"][0].addr, 0x0)
 
         # boot_a and super -> user, at the *device* partition's sector address
         user_addrs = sorted(w.addr for w in by_parttype["user"])
@@ -192,8 +192,8 @@ class RepartitionTest(WsTestBase):
         user_addrs = sorted(w.addr for w in dl.writes
                             if w.parttype == "user" and not w.has_wdata)
         self.assertEqual(user_addrs, [0x8000, 0x48000])
-        # preloader still routed to boot1
-        self.assertTrue(any(w.parttype == "boot1" for w in dl.writes))
+        # preloader still routed to the wrapping "boot" parttype
+        self.assertTrue(any(w.parttype == "boot" for w in dl.writes))
 
     def test_repartition_gpt_is_valid(self):
         # capture the primary blob and confirm it parses as a real GPT

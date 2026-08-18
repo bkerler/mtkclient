@@ -283,9 +283,22 @@ class Storage(metaclass=LogBase):
                     else:
                         parttype = EmmcPartitionType.MTK_DA_EMMC_PART_RPMB
                     length = min(length, self.emmc.rpmb_size)
+                elif parttype in ("boot", "boot1_boot2", "preloader"):
+                    # Preloader region (scatter "EMMC_BOOT1_BOOT2", type SV5_BL_BIN).
+                    # Unlike a raw boot1 write, this DA partition type makes the DA
+                    # build the EMMC_BOOT / BRLYT boot-region wrapper around the raw
+                    # preloader -- which is what the BROM needs to boot from boot1.
+                    # Writing the bare preloader to "boot1" instead leaves the device
+                    # dropping to BROM mode.
+                    if xml:
+                        parttype = "EMMC-BOOT1"
+                    else:
+                        parttype = EmmcPartitionType.MTK_DA_EMMC_BOOT1_BOOT2
+                    length = min(length, self.emmc.boot1_size)
             else:
                 self.error(
-                    "Unknown parttype. Known parttypes are \"boot1\",\"boot2\",\"gp1\",\"gp2\",\"gp3\",\"gp4\",\"rpmb\"")
+                    "Unknown parttype. Known parttypes are \"boot\",\"boot1\",\"boot2\","
+                    "\"gp1\",\"gp2\",\"gp3\",\"gp4\",\"rpmb\"")
                 return []
         elif storage == DaStorage.MTK_DA_STORAGE_UFS:
             if parttype == "user" or parttype is None:

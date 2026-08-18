@@ -112,7 +112,9 @@ class ScatterParserTest(unittest.TestCase):
         self.assertIsInstance(self.scatter.get("boot_a").is_download, bool)
 
     def test_region_to_parttype(self):
-        self.assertEqual(self.scatter.get("preloader").parttype, "boot1")
+        # preloader's EMMC_BOOT1_BOOT2 region must map to "boot" (DA parttype 10,
+        # which wraps it in a BRLYT boot header), NOT a raw "boot1" write.
+        self.assertEqual(self.scatter.get("preloader").parttype, "boot")
         self.assertEqual(self.scatter.get("boot_a").parttype, "user")
         self.assertTrue(self.scatter.get("preloader").is_boot_region)
         self.assertTrue(self.scatter.get("boot_a").is_user_region)
