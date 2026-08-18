@@ -189,6 +189,85 @@ class PseudoPartitionTest(unittest.TestCase):
         self.assertTrue(self._part("PGPT", 0x0).is_pseudo)  # case-insensitive
 
 
+class OperationTypeTest(unittest.TestCase):
+    def _part(self, name, op, addr=0x1000, size=0x1000):
+        return ScatterPartition({"partition_name": name, "operation_type": op,
+                                 "region": "EMMC_USER", "linear_start_addr": addr,
+                                 "partition_size": size})
+
+    def test_protected(self):
+        self.assertTrue(self._part("nvcfg", "PROTECTED").is_protected)
+        self.assertTrue(self._part("nvram", "BINREGION").is_protected)
+        self.assertFalse(self._part("boot_a", "UPDATE").is_protected)
+
+    def test_needs_resize(self):
+        self.assertTrue(self._part("userdata", "NEEDRESIZE").needs_resize)
+        self.assertFalse(self._part("boot_a", "UPDATE").needs_resize)
+
+    def test_reserved(self):
+        self.assertTrue(self._part("otp", "RESERVED").is_reserved)
+        self.assertFalse(self._part("boot_a", "UPDATE").is_reserved)
+
+    def test_is_reserved_flag(self):
+        p = ScatterPartition({"partition_name": "x", "operation_type": "UPDATE",
+                              "region": "EMMC_USER", "is_reserved": True})
+        self.assertTrue(p.is_reserved)
+
+
+class ProtectedAndResizeScatterTest(unittest.TestCase):
+    """Uses the real P30 scatter if present to check attribute-driven filtering."""
+    REAL = os.path.expanduser("~/Documents/P30/Firmware/MT6765_Android_scatter.txt")
+
+    def setUp(self):
+        if not os.path.exists(self.REAL):
+            self.skipTest("real scatter not present")
+        self.s = Scatter(self.REAL)
+
+    def test_reserved_excluded_from_gpt(self):
+        gpt_names = [p.name for p in self.s.gpt_partitions()]
+        for reserved in ("otp", "flashinfo", "sgpt"):
+            self.assertNotIn(reserved, gpt_names)
+
+    def test_protected_partitions_detected(self):
+        prot = {p.name for p in self.s.protected_partitions()}
+        # nvcfg/protect1/protect2/proinfo are PROTECTED, nvram is BINREGION
+        self.assertTrue({"nvcfg", "protect1", "protect2", "proinfo", "nvram"} <= prot)
+
+    def test_userdata_needs_resize(self):
+        self.assertTrue(self.s.get("userdata").needs_resize)
+
+    def test_dynamic_partitions_are_otp_flashinfo(self):
+        # otp/flashinfo are dynamically-addressed real entries; pgpt/sgpt are
+        # GPT tables and must not appear as dynamic partitions.
+        dyn = {p.name for p in self.s.dynamic_partitions()}
+        self.assertEqual(dyn, {"otp", "flashinfo"})
+        self.assertTrue(self.s.get("otp").is_dynamic)
+        self.assertTrue(self.s.get("sgpt").is_gpt_area)
+        self.assertFalse(self.s.get("sgpt").is_dynamic)
+
+
+class ScatterValidationTest(unittest.TestCase):
+    def _write(self, text):
+        fd, path = tempfile.mkstemp(suffix="_scatter.txt")
+        with os.fdopen(fd, "w") as wf:
+            wf.write(text)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def test_empty_scatter_rejected(self):
+        with self.assertRaises(ValueError):
+            Scatter(self._write("# nothing here\n"))
+
+    def test_non_v1_version_rejected(self):
+        text = SCATTER_TEXT.replace("config_version: V1.1.2", "config_version: V2.0.0")
+        with self.assertRaises(ValueError):
+            Scatter(self._write(text))
+
+    def test_v1_accepted(self):
+        s = Scatter(self._write(SCATTER_TEXT))
+        self.assertEqual(len(s.partitions), 4)
+
+
 class RealScatterTest(unittest.TestCase):
     """Runs only if the P30 scatter is present; skipped otherwise."""
     REAL = os.path.expanduser("~/Documents/P30/Firmware/MT6765_Android_scatter.txt")

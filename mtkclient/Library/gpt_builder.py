@@ -216,3 +216,32 @@ def parse_existing_entries(data: bytes, sectorsize: int = 512):
         if name:
             result[name] = (type_guid, unique_guid, flags)
     return result, disk_guid
+
+
+def parse_existing_layout(data: bytes, sectorsize: int = 512):
+    """
+    Walk a raw primary-GPT image and return {name.lower(): (first_lba, last_lba)}.
+    Used to detect whether a rebuilt table would move/resize existing partitions
+    (which would corrupt device-unique data). Returns {} if no valid GPT.
+    """
+    if len(data) < sectorsize * 2:
+        return {}
+    hdr = data[sectorsize:sectorsize + GPT_HEADER_SIZE]
+    if hdr[0:8] != GPT_SIGNATURE:
+        return {}
+    (_, _, _, _, _, _cur, _bak, _fu, _lu, _guid, entry_start_lba,
+     num_entries, entry_size, _ecrc) = unpack("<8sIIIIQQQQ16sQIII", hdr)
+    start = entry_start_lba * sectorsize
+    result = {}
+    for idx in range(num_entries):
+        off = start + idx * entry_size
+        entry = data[off:off + entry_size]
+        if len(entry) < 56:
+            break
+        if int.from_bytes(entry[0:16], "little") == 0:
+            continue
+        first_lba, last_lba = unpack("<QQ", entry[32:48])
+        name = entry[56:128].decode("utf-16-le", errors="replace").rstrip("\x00")
+        if name:
+            result[name.lower()] = (first_lba, last_lba)
+    return result

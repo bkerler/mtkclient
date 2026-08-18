@@ -90,7 +90,7 @@ class ScatterPartition:
         self.region = fields.get("region", "EMMC_USER")
         self.storage = fields.get("storage")
         self.operation_type = fields.get("operation_type")
-        self.is_reserved = bool(fields.get("is_reserved", False))
+        self._is_reserved_flag = bool(fields.get("is_reserved", False))
 
     @property
     def parttype(self) -> str:
@@ -101,10 +101,30 @@ class ScatterPartition:
         return self.parttype == "user"
 
     @property
+    def has_sentinel_addr(self) -> bool:
+        """linear_start_addr is a 0xFFFF00xx sentinel (address set dynamically)."""
+        return PSEUDO_ADDR_MIN <= self.linear_start_addr <= PSEUDO_ADDR_MAX
+
+    @property
+    def is_gpt_area(self) -> bool:
+        """The GPT tables themselves (pgpt/sgpt) -- never a partition entry."""
+        return (self.name or "").lower() in GPT_AREA_NAMES
+
+    @property
+    def is_dynamic(self) -> bool:
+        """Real partition whose address SP Flash Tool computes at flash time.
+
+        These (e.g. otp, flashinfo) sit after the resized userdata, so the
+        scatter gives them a sentinel address instead of a fixed one. They ARE
+        real GPT entries -- their true position must be taken from the device's
+        current table, not invented.
+        """
+        return self.has_sentinel_addr and not self.is_gpt_area
+
+    @property
     def is_pseudo(self) -> bool:
-        """True for virtual/sentinel entries (otp, flashinfo, pgpt, sgpt, ...)."""
-        return (PSEUDO_ADDR_MIN <= self.linear_start_addr <= PSEUDO_ADDR_MAX or
-                (self.name or "").lower() in GPT_AREA_NAMES)
+        """Not a fixed-address partition entry (GPT-table or dynamic)."""
+        return self.has_sentinel_addr or self.is_gpt_area
 
     @property
     def is_boot_region(self) -> bool:
@@ -114,6 +134,33 @@ class ScatterPartition:
     def is_preloader(self) -> bool:
         """The bootloader that goes in boot1 wrapped in an EMMC_BOOT header."""
         return self.type == "SV5_BL_BIN" or (self.name or "").lower() == "preloader"
+
+    # --- operation_type semantics (drive safe GPT rebuilds) ---------------
+    # BOOTLOADERS  preloader
+    # INVISIBLE    normal partition, hidden in the UI, still real in the GPT
+    # UPDATE       normal updatable partition
+    # PROTECTED    device-unique data that MUST be preserved (nvcfg, proinfo, ...)
+    # BINREGION    device-unique binary region that MUST be preserved (nvram)
+    # NEEDRESIZE   grown to fill the remaining space (userdata)
+    # RESERVED     not a real linear partition (otp/flashinfo/sgpt)
+    @property
+    def op(self) -> str:
+        return str(self.operation_type or "").upper()
+
+    @property
+    def is_protected(self) -> bool:
+        """Holds device-unique data that must survive a repartition."""
+        return self.op in ("PROTECTED", "BINREGION")
+
+    @property
+    def needs_resize(self) -> bool:
+        """Grown to fill the rest of the disk (userdata)."""
+        return self.op == "NEEDRESIZE"
+
+    @property
+    def is_reserved(self) -> bool:
+        """Not a real placeable partition (RESERVED op, or the is_reserved flag)."""
+        return self.op == "RESERVED" or self._is_reserved_flag
 
     def start_lba(self, sectorsize: int) -> int:
         return self.linear_start_addr // sectorsize
@@ -136,7 +183,25 @@ class Scatter:
         self.storage = None
         self.block_size = 0x20000
         self.project = None
+        self.config_version = None
         self._parse(filename)
+        self._validate()
+
+    def _validate(self):
+        """Reject formats this parser can't handle instead of mis-flashing.
+
+        Only the SP Flash Tool v1 YAML text scatter (config_version V1.x, the
+        one paired with the xflash/legacy DA) is supported. Newer DAs (V6) are
+        driven with an XML scatter sent to the device, which this parser does
+        not produce and the ws flow does not use.
+        """
+        if not self.partitions:
+            raise ValueError(f"{self.filename}: no partitions parsed; not a "
+                             f"recognised SP Flash Tool v1 (YAML) scatter file")
+        ver = str(self.config_version or "")
+        if ver and not ver.upper().startswith("V1"):
+            raise ValueError(f"{self.filename}: unsupported scatter config_version "
+                             f"{self.config_version!r}; only V1 (YAML) scatters are supported")
 
     def _parse(self, filename: str):
         with open(filename, "r", encoding="utf-8", errors="replace") as rf:
@@ -178,6 +243,7 @@ class Scatter:
                 self.platform = fields.get("platform")
                 self.storage = fields.get("storage")
                 self.project = fields.get("project")
+                self.config_version = fields.get("config_version")
                 if fields.get("block_size"):
                     self.block_size = fields.get("block_size")
             elif kind == "partition_index":
@@ -193,13 +259,28 @@ class Scatter:
         return [p for p in self.partitions if p.is_user_region]
 
     def gpt_partitions(self):
-        """Real, linearly-addressed user partitions to place in a rebuilt GPT.
+        """Fixed-address user partitions to place in a rebuilt GPT.
 
-        Excludes the GPT tables themselves (pgpt/sgpt) and the sentinel-addressed
-        pseudo partitions (otp/flashinfo/...) that must not appear in the table.
+        Excludes the GPT tables (pgpt/sgpt) and the dynamically-addressed
+        partitions (otp/flashinfo), which are handled separately because their
+        real position depends on the resized userdata / device flash size.
         """
         return [p for p in self.partitions
                 if p.is_user_region and not p.is_pseudo and p.partition_size > 0]
+
+    def dynamic_partitions(self):
+        """Real user partitions whose address SP Flash Tool sets at flash time.
+
+        These (otp, flashinfo, ...) ARE GPT entries but sit after the resized
+        userdata, so the scatter gives them a sentinel address. Their true
+        position must be read from the device's existing table.
+        """
+        return [p for p in self.partitions
+                if p.is_user_region and p.is_dynamic and p.partition_size > 0]
+
+    def protected_partitions(self):
+        """Partitions holding device-unique data that a repartition must preserve."""
+        return [p for p in self.partitions if p.is_protected]
 
     def get(self, name: str):
         for p in self.partitions:

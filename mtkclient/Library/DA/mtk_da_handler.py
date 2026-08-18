@@ -770,7 +770,7 @@ class DaHandler(metaclass=LogBase):
                 print(f"Failed to write {partfilename} to sector {str(pos // 0x200)} with " +
                       f"sector count {str(size // 0x200)}.")
 
-    def da_ws_repartition(self, scatter, sectorsize: int) -> bool:
+    def da_ws_repartition(self, scatter, sectorsize: int, allow_data_loss: bool = False) -> bool:
         """Rebuild and write a GPT (primary + backup) from the scatter layout.
 
         This is the "repartition" step of a SP Flash Tool firmware upgrade: the
@@ -779,14 +779,16 @@ class DaHandler(metaclass=LogBase):
         preserved by name so a re-flash keeps the device's own identifiers.
         """
         from mtkclient.Library.gpt_builder import (GPTBuilder, GptPartitionEntry,
-                                                   parse_existing_entries, BASIC_DATA_TYPE_GUID)
+                                                   parse_existing_entries, parse_existing_layout,
+                                                   BASIC_DATA_TYPE_GUID)
         flashsize = self.mtk.daloader.daconfig.storage.flashsize
         if not flashsize:
             self.error("Couldn't determine flash size; cannot repartition.")
             return False
         total_sectors = flashsize // sectorsize
 
-        # Read the current primary GPT so we can preserve type/unique GUIDs.
+        # Read the current primary GPT: preserve type/unique GUIDs AND learn the
+        # device's current layout so we can protect device-unique data.
         existing = b""
         try:
             existing = self.mtk.daloader.readflash(addr=0, length=0x8000, filename="",
@@ -794,19 +796,80 @@ class DaHandler(metaclass=LogBase):
         except Exception as err:
             self.debug(f"Couldn't read existing GPT: {err}")
         name_map, disk_guid = parse_existing_entries(existing or b"", sectorsize)
+        current_layout = parse_existing_layout(existing or b"", sectorsize)
 
         builder = GPTBuilder(sectorsize=sectorsize, disk_guid=disk_guid)
+        last_usable = builder.last_usable_lba(total_sectors)
+
+        def guids(name):
+            if name in name_map:
+                return name_map[name]
+            self.info(f"New partition {name}: assigning basic-data type GUID")
+            return BASIC_DATA_TYPE_GUID, None, 0
+
+        # Dynamically-addressed partitions (otp, flashinfo, ...) ARE real GPT
+        # entries, but their address is computed at flash time (they live after
+        # the resized userdata). We can't invent that layout safely, so we take
+        # their true position from the device's current GPT. Anything we can't
+        # locate is skipped with a warning rather than mis-placed.
+        dynamic_entries = []
+        earliest_dynamic = last_usable + 1  # userdata may grow up to here if no dynamics
+        for p in scatter.dynamic_partitions():
+            cur = current_layout.get((p.name or "").lower())
+            if cur is None:
+                self.warning(f"Dynamic partition {p.name} not found in the device's "
+                             f"current GPT; leaving it out of the new table.")
+                continue
+            first, last = cur
+            earliest_dynamic = min(earliest_dynamic, first)
+            type_guid, unique_guid, flags = guids(p.name)
+            dynamic_entries.append(GptPartitionEntry(p.name, first, last, type_guid=type_guid,
+                                                     unique_guid=unique_guid, flags=flags))
+
         entries = []
         for p in scatter.gpt_partitions():
             first = p.linear_start_addr // sectorsize
-            last = first + p.size_lba(sectorsize) - 1
-            if p.name in name_map:
-                type_guid, unique_guid, flags = name_map[p.name]
+            if p.needs_resize:
+                # NEEDRESIZE (userdata): the scatter size is a placeholder; SP Flash
+                # Tool grows it to fill the space up to the trailing dynamic
+                # partitions (or the end of the disk if there are none).
+                last = earliest_dynamic - 1
+                self.info(f"Resizing {p.name} to fill disk "
+                          f"({(last - first + 1) * sectorsize // (1024 * 1024)} MB)")
             else:
-                type_guid, unique_guid, flags = BASIC_DATA_TYPE_GUID, None, 0
-                self.info(f"New partition {p.name}: assigning basic-data type GUID")
+                last = first + p.size_lba(sectorsize) - 1
+            type_guid, unique_guid, flags = guids(p.name)
             entries.append(GptPartitionEntry(p.name, first, last, type_guid=type_guid,
                                              unique_guid=unique_guid, flags=flags))
+        entries.extend(dynamic_entries)
+
+        # SAFETY: refuse to move/resize device-unique partitions (nvram, nvcfg,
+        # proinfo, protect*, ...). A moved PROTECTED partition means its data
+        # (IMEI, calibration, keys) is silently lost. Only proceed if the new
+        # layout keeps every protected partition exactly where it already is,
+        # unless the caller explicitly accepts data loss.
+        conflicts = []
+        for p in scatter.protected_partitions():
+            new_first = p.linear_start_addr // sectorsize
+            new_last = new_first + p.size_lba(sectorsize) - 1
+            cur = current_layout.get((p.name or "").lower())
+            if cur is None:
+                continue  # not currently present; nothing to lose
+            if cur != (new_first, new_last):
+                conflicts.append((p.name, cur, (new_first, new_last)))
+        if conflicts and not allow_data_loss:
+            self.error("Refusing to repartition: the new layout would move/resize "
+                       "device-unique (PROTECTED) partitions, destroying their data:")
+            for name, cur, new in conflicts:
+                self.error(f"    {name}: device @ sectors {cur[0]}-{cur[1]} "
+                           f"-> scatter @ {new[0]}-{new[1]}")
+            self.error("Back these up first, then re-run with allow_data_loss=True "
+                       "if you really intend to wipe them.")
+            return False
+        if conflicts:
+            self.warning(f"Proceeding despite {len(conflicts)} protected-partition "
+                         f"layout change(s) (allow_data_loss set).")
+
         try:
             primary, backup, backup_lba = builder.build(entries, total_sectors)
         except ValueError as err:
@@ -826,7 +889,8 @@ class DaHandler(metaclass=LogBase):
         self.info("New partition table written.")
         return True
 
-    def da_ws(self, scatterfile: str, repartition: bool = False, skip_preloader: bool = False):
+    def da_ws(self, scatterfile: str, repartition: bool = False, skip_preloader: bool = False,
+              allow_data_loss: bool = False):
         """Flash a full firmware described by a SP Flash Tool scatter file.
 
         Default (Download Only): write every is_download partition into the
@@ -880,7 +944,7 @@ class DaHandler(metaclass=LogBase):
                       f"{os.stat(path).st_size:>12d} bytes  [{p.parttype}]")
 
         if repartition:
-            if not self.da_ws_repartition(scatter, sectorsize):
+            if not self.da_ws_repartition(scatter, sectorsize, allow_data_loss=allow_data_loss):
                 self.close()
                 return False
 
@@ -888,13 +952,21 @@ class DaHandler(metaclass=LogBase):
         for p, path in plan:
             size = os.stat(path).st_size
             if p.is_preloader:
-                # The preloader must be wrapped in an EMMC_BOOT/BRLYT boot header
-                # before it goes to boot1, otherwise the BROM won't boot it.
+                # The preloader must be wrapped in a boot-region header (EMMC_BOOT/
+                # BRLYT) before it goes to boot1, otherwise the BROM won't boot it.
+                # This software wrapping is verified for eMMC only; other storage
+                # raises, so we fail cleanly instead of writing a bricking header.
                 from mtkclient.Library.preloader_boot import wrap_preloader
+                storage = self.mtk.daloader.daconfig.storage.flashtype or "emmc"
                 with open(path, "rb") as rf:
-                    wrapped = wrap_preloader(rf.read())
+                    try:
+                        wrapped = wrap_preloader(rf.read(), storage=storage)
+                    except ValueError as err:
+                        self.error(f"Skipping preloader: {err}")
+                        allok = False
+                        continue
                 self.info(f"Writing {p.name} -> boot1 @ 0x0 "
-                          f"(EMMC_BOOT-wrapped, {len(wrapped)} bytes)")
+                          f"(boot-header-wrapped, {len(wrapped)} bytes)")
                 ok = self.mtk.daloader.writeflash(addr=0, length=len(wrapped),
                                                   filename="", wdata=wrapped, parttype="boot1")
             elif p.is_boot_region:
@@ -1527,7 +1599,8 @@ class DaHandler(metaclass=LogBase):
         elif cmd == "ws":
             self.da_ws(scatterfile=args.scatterfile,
                        repartition=getattr(args, "repartition", False),
-                       skip_preloader=getattr(args, "skip_preloader", False))
+                       skip_preloader=getattr(args, "skip_preloader", False),
+                       allow_data_loss=getattr(args, "allow_data_loss", False))
         elif cmd == "e":
             partitionname = args.partitionname
             parttype = args.parttype

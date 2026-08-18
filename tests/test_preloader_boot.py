@@ -54,6 +54,24 @@ class WrapTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             wrap_preloader(b"\x00" * (DEFAULT_REGION_SIZE + 1))
 
+    def test_unverified_storage_refused(self):
+        # UFS/NAND must not get a made-up header that could brick the device
+        for storage in ("ufs", "nand", "nor"):
+            with self.assertRaises(ValueError):
+                wrap_preloader(b"MMM\x01" + b"\x00" * 0x100, storage=storage)
+
+    def test_is_wrapped_recognises_other_magics(self):
+        from mtkclient.Library.preloader_boot import is_wrapped
+        self.assertTrue(is_wrapped(b"EMMC_BOOT\x00\x00\x00rest"))
+        self.assertTrue(is_wrapped(b"UFS_BOOT\x00rest"))
+        self.assertTrue(is_wrapped(b"COMBO_BOOT\x00rest"))
+        self.assertFalse(is_wrapped(b"MMM\x01 not a boot header"))
+
+    def test_descriptor_type_decode(self):
+        # 0x00010005 = device_type EMMC(0x05) | reserved(0) | gfh_type ARM_BL(1)<<16
+        hdr = build_boot_header("emmc")
+        self.assertEqual(unpack("<I", hdr[0x218:0x21C])[0], 0x00010005)
+
 
 class RealDumpTest(unittest.TestCase):
     """If a real boot1 dump is available, our header must match it exactly."""

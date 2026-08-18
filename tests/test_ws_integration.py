@@ -75,7 +75,7 @@ class FakeDaLoader:
         self.existing_gpt = existing_gpt
         self.partitions = partitions or {}
         self.daconfig = SimpleNamespace(
-            storage=SimpleNamespace(flashsize=FLASH_SECTORS * SECTOR))
+            storage=SimpleNamespace(flashsize=FLASH_SECTORS * SECTOR, flashtype="emmc"))
 
     def writeflash(self, addr, length, filename="", offset=0, parttype=None,
                    wdata=None, display=True):

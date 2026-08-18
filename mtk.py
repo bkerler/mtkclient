@@ -176,6 +176,10 @@ def main():
                                         '(SP Flash Tool "Firmware Upgrade"). Default is download-only.')
     cmd_parsers["ws"].add_argument('--skip_preloader', action="store_true", default=False,
                                    help='Do not flash the preloader partition')
+    cmd_parsers["ws"].add_argument('--allow_data_loss', action="store_true", default=False,
+                                   help='Allow --repartition to move/resize PROTECTED partitions '
+                                        '(nvram, nvcfg, proinfo, ...). This DESTROYS their '
+                                        'device-unique data. Off by default.')
 
     # Full flash image
     for cmd in ["rf", "wf"]:

@@ -14,8 +14,8 @@ from struct import unpack
 from uuid import UUID
 
 from mtkclient.Library.gpt_builder import (
-    GPTBuilder, GptPartitionEntry, parse_existing_entries, guid_to_bytes,
-    BASIC_DATA_TYPE_GUID, GPT_SIGNATURE,
+    GPTBuilder, GptPartitionEntry, parse_existing_entries, parse_existing_layout,
+    guid_to_bytes, BASIC_DATA_TYPE_GUID, GPT_SIGNATURE,
 )
 from mtkclient.Library.Partitions.gpt import gpt
 

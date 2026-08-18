@@ -23,14 +23,17 @@ reads a fixed layout at offset 0:
     0x228  0x00 padding .. 0x800
     0x800  preloader payload (GFH "MMM\\x01 FILE_INFO ...")
 
-SP Flash Tool builds this header in software and writes header+preloader to
-boot1; the download agent writes it raw. Writing the bare preloader at offset 0
-(as a plain boot1 write does) leaves no valid BRLYT, so the BROM finds no
-bootloader and the device drops to BROM/download mode.
+Writing the bare preloader at offset 0 (as a plain boot1 write does) leaves no
+valid BRLYT, so the BROM finds no bootloader and the device drops to BROM mode.
 
-The header is constant for a given platform (it only points at the preloader
-region), so we reproduce it byte-for-byte. Values verified against a real
-k62v1_64_bsp (MT6765) boot1 dump.
+NOTE ON APPROACH: the DA's "download" command builds this boot header on the
+device itself and is the proper, storage-agnostic way to flash a preloader (it
+works for eMMC/UFS/NAND alike). This module is a software fallback used by the
+xflash write path; it is verified byte-for-byte only against a real eMMC
+(k62v1_64_bsp / MT6765) boot1 dump, and refuses storage types it hasn't been
+verified for (see wrap_preloader) rather than emit a header that could brick.
+The header is otherwise constant for a platform (it only points at the
+preloader region), so we reproduce it exactly.
 """
 from struct import pack
 
@@ -41,54 +44,93 @@ BRLYT_BBBB = 0x42424242
 HEADER_SIZE = 0x800            # preloader starts here
 PRELOADER_REGION_BEGIN = 0x800
 DEFAULT_REGION_SIZE = 0x40000  # 256 KiB main region (boundary = begin + size)
-DEFAULT_DEV_RW_UNIT = 0x200    # eMMC sector
+
+# Block/rw unit per storage. eMMC = 512, UFS = 4096.
+DEV_RW_UNIT = {"emmc": 0x200, "ufs": 0x1000}
+
+# m_device_type (low byte of the BRLYT descriptor magic word, see below).
+DEVICE_TYPE = {"emmc": 0x05, "nand": 0x01, "nor": 0x02, "sf": 0x03, "ufs": 0x0B}
+GFH_TYPE_ARM_BL = 0x0001       # ARM bootloader GFH type
+
+# The boot-region identifier that sits at offset 0 differs per storage.
+BOOT_MAGIC = {"emmc": b"EMMC_BOOT", "ufs": b"UFS_BOOT",
+              "sdmmc": b"SDMMC_BOOT", "combo": b"COMBO_BOOT", "sf": b"SF_BOOT"}
+KNOWN_BOOT_MAGICS = tuple(BOOT_MAGIC.values())
+
+# The software-built header is only verified byte-for-byte against a real
+# eMMC (k62v1_64_bsp) dump. UFS/NAND/NOR use different block sizes, magics and
+# descriptor fields, so we refuse them here rather than emit a wrong header
+# that would brick the device. (The proper cross-storage path is the DA
+# "download" command, which builds the boot header on the device itself.)
+VERIFIED_STORAGE = ("emmc",)
 
 
 def is_wrapped(data: bytes) -> bool:
-    """True if data already begins with an EMMC_BOOT boot-region header."""
-    return data[:9] == b"EMMC_BOOT"
+    """True if data already begins with any known boot-region header."""
+    return any(data.startswith(m) for m in KNOWN_BOOT_MAGICS)
 
 
-def build_boot_header(dev_rw_unit: int = DEFAULT_DEV_RW_UNIT,
-                      region_size: int = DEFAULT_REGION_SIZE) -> bytes:
+def build_boot_header(storage: str = "emmc", region_size: int = DEFAULT_REGION_SIZE) -> bytes:
+    if storage not in DEV_RW_UNIT or storage not in DEVICE_TYPE:
+        raise ValueError(f"unsupported storage {storage!r} for boot header")
+    dev_rw_unit = DEV_RW_UNIT[storage]
+    # Descriptor magic word (little-endian bytes 05 00 01 00 on eMMC):
+    #   byte0 = m_device_type (EMMC=0x05), byte1 = reserved,
+    #   u16    = m_gfh_type (0x0001 = ARM bootloader).
+    desc_type = DEVICE_TYPE[storage] | (GFH_TYPE_ARM_BL << 16)
+
     begin = PRELOADER_REGION_BEGIN
     boundary = begin + region_size
     hdr = bytearray(b"\xFF" * HEADER_SIZE)
 
-    # EMMC_BOOT header @ 0x000
-    hdr[0x000:0x00C] = EMMC_BOOT_MAGIC
+    # boot identifier header @ 0x000 ("EMMC_BOOT\0\0\0", ...)
+    hdr[0x000:0x00C] = BOOT_MAGIC[storage].ljust(0x0C, b"\x00")
     hdr[0x00C:0x010] = pack("<I", 1)            # bl_exist
     hdr[0x010:0x014] = pack("<I", dev_rw_unit)  # dev_rw_unit
     # 0x014..0x1FF stays 0xFF
 
-    # BRLYT @ 0x200. The block is 0x00-padded except for an erased 0xFF island
-    # at 0x2b4..0x400 (relative 0xb4..0x200) -- reproduced to match the device's
-    # own boot1 layout byte-for-byte.
+    # BRLYT @ 0x200:
+    #   identifier[8] "BRLYT\0\0\0"
+    #   version, boot_region_address, main_region_address
+    #   bl_desc[8]  -- array of 8 BlDescriptor{ bl_exists_magic u32, bl_dev u8,
+    #                  reserved u8, bl_type u16, bl_begin_addr u32,
+    #                  bl_boundary_addr u32, bl_attribute u32 } (0x14 each).
+    # Only descriptor[0] is populated; the struct ends at 0xB4 and the device
+    # leaves the rest of the header as an erased 0xFF island (reproduced so the
+    # output matches a real boot1 dump byte-for-byte). Layout cross-checked
+    # against shomykohai/hacc src/preloader/pl.rs.
     brlyt = bytearray(HEADER_SIZE - 0x200)
     brlyt[0xB4:0x200] = b"\xFF" * (0x200 - 0xB4)
     brlyt[0x00:0x08] = BRLYT_MAGIC
-    brlyt[0x08:0x0C] = pack("<I", 1)          # info_ver
-    brlyt[0x0C:0x10] = pack("<I", begin)      # boot_region_addr
-    brlyt[0x10:0x14] = pack("<I", boundary)   # main_region_addr
-    brlyt[0x14:0x18] = pack("<I", BRLYT_BBBB)
-    brlyt[0x18:0x1C] = pack("<I", 0x00010005)  # type
-    brlyt[0x1C:0x20] = pack("<I", begin)      # descriptor begin_dev_addr
-    brlyt[0x20:0x24] = pack("<I", boundary)   # descriptor boundary_dev_addr
-    brlyt[0x24:0x28] = pack("<I", 1)          # descriptor attr
+    brlyt[0x08:0x0C] = pack("<I", 1)          # version
+    brlyt[0x0C:0x10] = pack("<I", begin)      # boot_region_address
+    brlyt[0x10:0x14] = pack("<I", boundary)   # main_region_address
+    # bl_desc[0]:
+    brlyt[0x14:0x18] = pack("<I", BRLYT_BBBB)  # bl_exists_magic
+    brlyt[0x18:0x1C] = pack("<I", desc_type)   # bl_dev | reserved | bl_type<<16
+    brlyt[0x1C:0x20] = pack("<I", begin)       # bl_begin_addr
+    brlyt[0x20:0x24] = pack("<I", boundary)    # bl_boundary_addr
+    brlyt[0x24:0x28] = pack("<I", 1)           # bl_attribute
     hdr[0x200:HEADER_SIZE] = brlyt
     return bytes(hdr)
 
 
-def wrap_preloader(preloader: bytes, dev_rw_unit: int = DEFAULT_DEV_RW_UNIT,
+def wrap_preloader(preloader: bytes, storage: str = "emmc",
                    region_size: int = DEFAULT_REGION_SIZE) -> bytes:
-    """Return EMMC_BOOT header + preloader, ready to write raw to boot1.
+    """Return boot header + preloader, ready to write raw to boot1.
 
     If the input is already wrapped it is returned unchanged. Raises ValueError
-    if the preloader is too big for the boot region.
+    if the preloader is too big for the boot region, or if the storage type is
+    not one we can build a verified header for (use the DA download command for
+    UFS/NAND/NOR instead).
     """
     if is_wrapped(preloader):
         return preloader
+    if storage not in VERIFIED_STORAGE:
+        raise ValueError(
+            f"software preloader wrapping is only verified for {VERIFIED_STORAGE} "
+            f"(got {storage!r}); flash the preloader via the DA download command instead")
     if len(preloader) > region_size:
         raise ValueError(f"preloader ({len(preloader)} bytes) exceeds boot region "
                          f"({region_size} bytes)")
-    return build_boot_header(dev_rw_unit, region_size) + preloader
+    return build_boot_header(storage, region_size) + preloader
