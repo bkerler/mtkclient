@@ -38,7 +38,10 @@ class EmmcPartitionType:
     MTK_DA_EMMC_PART_GP4 = 7
     MTK_DA_EMMC_PART_USER = 8
     MTK_DA_EMMC_PART_END = 9
-    MTK_DA_EMMC_BOOT1_BOOT2 = 10
+    # NOTE: section type 10 (EMMC_BOOT1_BOOT2) is NOT a valid write_data storage
+    # section -- the DA rejects it with 0xc003000c. The preloader is wrapped in
+    # software (preloader_boot.py) and written to boot1 instead. Do not add a
+    # parttype that maps here.
 
 
 class UFSPartitionType:

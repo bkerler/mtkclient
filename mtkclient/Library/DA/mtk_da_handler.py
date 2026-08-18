@@ -781,6 +781,11 @@ class DaHandler(metaclass=LogBase):
         from mtkclient.Library.gpt_builder import (GPTBuilder, GptPartitionEntry,
                                                    parse_existing_entries, parse_existing_layout,
                                                    BASIC_DATA_TYPE_GUID)
+        if scatter.skip_pt_operate:
+            # SP Flash Tool honours this flag by NOT touching PGPT/SGPT.
+            self.info("scatter has skip_pt_operate=true; leaving the partition "
+                      "table unchanged.")
+            return True
         flashsize = self.mtk.daloader.daconfig.storage.flashsize
         if not flashsize:
             self.error("Couldn't determine flash size; cannot repartition.")
@@ -802,8 +807,9 @@ class DaHandler(metaclass=LogBase):
         last_usable = builder.last_usable_lba(total_sectors)
 
         def guids(name):
-            if name in name_map:
-                return name_map[name]
+            key = (name or "").lower()
+            if key in name_map:
+                return name_map[key]
             self.info(f"New partition {name}: assigning basic-data type GUID")
             return BASIC_DATA_TYPE_GUID, None, 0
 
@@ -829,11 +835,14 @@ class DaHandler(metaclass=LogBase):
         entries = []
         for p in scatter.gpt_partitions():
             first = p.linear_start_addr // sectorsize
-            if p.needs_resize:
+            if p.needs_resize and not scatter.skip_resize:
                 # NEEDRESIZE (userdata): the scatter size is a placeholder; SP Flash
                 # Tool grows it to fill the space up to the trailing dynamic
-                # partitions (or the end of the disk if there are none).
-                last = earliest_dynamic - 1
+                # partitions (or the end of the disk if there are none), rounded
+                # DOWN to the flash erase-block so the tail stays aligned.
+                blk_sectors = max(1, scatter.block_size // sectorsize)
+                end_excl = (earliest_dynamic // blk_sectors) * blk_sectors
+                last = end_excl - 1
                 self.info(f"Resizing {p.name} to fill disk "
                           f"({(last - first + 1) * sectorsize // (1024 * 1024)} MB)")
             else:
@@ -842,6 +851,16 @@ class DaHandler(metaclass=LogBase):
             entries.append(GptPartitionEntry(p.name, first, last, type_guid=type_guid,
                                              unique_guid=unique_guid, flags=flags))
         entries.extend(dynamic_entries)
+
+        # Warn about device partitions that the new table would drop -- their
+        # data becomes unreachable. (SP Flash Tool's DA backs up device-unique
+        # regions before repartition via FLASH-UPDATE's backup_folder; we cannot
+        # do that host-side, so at least make the loss visible.)
+        new_names = {(e.name or "").lower() for e in entries}
+        for dev_name in current_layout:
+            if dev_name not in new_names:
+                self.warning(f"Device partition {dev_name!r} is not in the new "
+                             f"layout and will be dropped -- back it up if it holds data.")
 
         # SAFETY: refuse to move/resize device-unique partitions (nvram, nvcfg,
         # proinfo, protect*, ...). A moved PROTECTED partition means its data
@@ -889,6 +908,36 @@ class DaHandler(metaclass=LogBase):
         self.info("New partition table written.")
         return True
 
+    def da_ws_write_image(self, name, path, part_addr, part_bytes):
+        """Write one user-partition image to `part_addr`, expanding Android sparse
+        images on the fly (super/userdata are usually sparse). part_bytes is the
+        partition size for the fit check (None to skip). Returns True on success.
+        """
+        from mtkclient.Library.sparse import is_sparse_file, SparseImage
+        if is_sparse_file(path):
+            with SparseImage(path) as img:
+                expanded = img.expanded_size
+                if part_bytes is not None and expanded > part_bytes:
+                    self.error(f"{os.path.basename(path)} expands to {expanded} bytes, "
+                               f"larger than partition {name} ({part_bytes} bytes); skipping.")
+                    return False
+                self.info(f"Writing {name} (sparse -> {expanded} bytes) @ {hex(part_addr)}")
+                for offset, data in img.regions():
+                    if not self.mtk.daloader.writeflash(addr=part_addr + offset, length=len(data),
+                                                        filename="", wdata=data,
+                                                        parttype="user", display=False):
+                        self.error(f"Failed writing {name} at offset {hex(offset)}")
+                        return False
+                return True
+        size = os.stat(path).st_size
+        if part_bytes is not None and size > part_bytes:
+            self.error(f"{os.path.basename(path)} ({size} bytes) is larger than "
+                       f"partition {name} ({part_bytes} bytes); skipping.")
+            return False
+        self.info(f"Writing {name} @ {hex(part_addr)}")
+        return self.mtk.daloader.writeflash(addr=part_addr, length=size, filename=path,
+                                            parttype="user")
+
     def da_ws(self, scatterfile: str, repartition: bool = False, skip_preloader: bool = False,
               allow_data_loss: bool = False):
         """Flash a full firmware described by a SP Flash Tool scatter file.
@@ -896,6 +945,19 @@ class DaHandler(metaclass=LogBase):
         Default (Download Only): write every is_download partition into the
         device's existing partitions. With repartition=True (Firmware Upgrade):
         rebuild the GPT from the scatter first, then flash by scatter address.
+
+        Known limitations vs SP Flash Tool (which delegates these to the DA and,
+        on v6, drives everything from an XML scatter it sends to the device):
+          - Uses WRITE_DATA; works on a patched DA (mtkclient's default) but a
+            stock/secured DA may reject it ("cmd_write_data is not allowed").
+            The DA "download" command is the proper path and also drives the
+            DA's own sparse/format logic; not implemented here.
+          - Sparse images are expanded host-side (da_ws_write_image); a resized
+            userdata is NOT reformatted to the new size (Android resizes on first
+            boot).
+          - No post-write per-image checksum verification (v6 scatter_checksum).
+          - Device-unique regions are not backed up before a repartition (SP
+            Flash Tool's FLASH-UPDATE backup_folder); we only guard/warn.
         """
         from mtkclient.Library.scatter import Scatter
 
@@ -976,9 +1038,7 @@ class DaHandler(metaclass=LogBase):
                                                   filename=path, parttype=p.parttype)
             elif repartition:
                 # layout is the one we just wrote: flash straight to the scatter address
-                self.info(f"Writing {p.name} @ {hex(p.linear_start_addr)}")
-                ok = self.mtk.daloader.writeflash(addr=p.linear_start_addr, length=size,
-                                                  filename=path, parttype="user")
+                ok = self.da_ws_write_image(p.name, path, p.linear_start_addr, None)
             else:
                 # Download Only: resolve the partition by name in the device GPT
                 res = self.mtk.daloader.detect_partition(p.name, "user")
@@ -989,15 +1049,8 @@ class DaHandler(metaclass=LogBase):
                     continue
                 rpartition = res[1]
                 partbytes = rpartition.sectors * sectorsize
-                if size > partbytes:
-                    self.error(f"{os.path.basename(path)} ({size} bytes) is larger than "
-                               f"partition {p.name} ({partbytes} bytes); skipping.")
-                    allok = False
-                    continue
-                self.info(f"Writing {p.name} @ sector {rpartition.sector}")
-                ok = self.mtk.daloader.writeflash(addr=rpartition.sector * sectorsize,
-                                                  length=partbytes, filename=path,
-                                                  parttype="user")
+                ok = self.da_ws_write_image(p.name, path, rpartition.sector * sectorsize,
+                                            partbytes)
             if ok:
                 print(f"Wrote {os.path.basename(path)} to {p.name}.")
             else:

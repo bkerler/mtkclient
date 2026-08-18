@@ -168,6 +168,12 @@ class GPTBuildTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.builder.build(entries, TOTAL_SECTORS)
 
+    def test_overlapping_partitions_raise(self):
+        entries = [GptPartitionEntry("a", 64, 200),
+                   GptPartitionEntry("b", 150, 300)]  # overlaps a
+        with self.assertRaises(ValueError):
+            self.builder.build(entries, TOTAL_SECTORS)
+
 
 class ParseExistingEntriesTest(unittest.TestCase):
     def test_roundtrip_preserves_type_and_unique(self):
@@ -181,6 +187,18 @@ class ParseExistingEntriesTest(unittest.TestCase):
         self.assertEqual(unique_guid, guid_to_bytes(
             UUID("11111111-1111-1111-1111-111111111111")))
         self.assertEqual(disk_guid, builder.disk_guid)
+
+    def test_flags_preserved_not_last_lba(self):
+        # regression: flags live at entry[48:56], not [40:48] (that's last_lba).
+        builder = GPTBuilder(sectorsize=SECTOR)
+        e = GptPartitionEntry("boot_a", 64, 2111,
+                              unique_guid=UUID("11111111-1111-1111-1111-111111111111"),
+                              flags=0x123456789ABCDEF0)
+        primary, _b, _l = builder.build([e], TOTAL_SECTORS)
+        found, _ = parse_existing_entries(primary, SECTOR)
+        _t, _u, flags = found["boot_a"]
+        self.assertEqual(flags, 0x123456789ABCDEF0)
+        self.assertNotEqual(flags, 2111)  # must not be last_lba
 
     def test_no_gpt_returns_empty(self):
         found, disk_guid = parse_existing_entries(b"\x00" * (SECTOR * 4), SECTOR)

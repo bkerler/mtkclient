@@ -149,6 +149,20 @@ class ScatterParserTest(unittest.TestCase):
         for region in ("EMMC_BOOT1_BOOT2", "EMMC_USER", "EMMC_BOOT_2"):
             self.assertIn(region, REGION_TO_PARTTYPE)
 
+    def test_region_names_match_spft_exactly(self):
+        # exact strings SP Flash Tool serialises (verified vs FlashtoollibEx.dll):
+        # underscore GP, RPMP typo, UFS preloader region.
+        def pt(region):
+            return ScatterPartition({"partition_name": "x", "region": region}).parttype
+        self.assertEqual(pt("EMMC_GP_1"), "gp1")
+        self.assertEqual(pt("EMMC_GP_4"), "gp4")
+        self.assertEqual(pt("EMMC_RPMP"), "rpmb")
+        self.assertEqual(pt("UFS_LU0_LU1"), "boot1")
+        self.assertEqual(pt("UFS_LU0"), "user")
+        # the wrong spellings must NOT be mapped (they'd fall back to user)
+        self.assertNotIn("EMMC_GP1", REGION_TO_PARTTYPE)
+        self.assertNotIn("EMMC_RPMB", REGION_TO_PARTTYPE)
+
     def test_comments_and_blank_lines_ignored(self):
         text = "# a comment\n\n" + SCATTER_TEXT
         fd, path = tempfile.mkstemp(suffix="_scatter.txt")
@@ -258,14 +272,20 @@ class ScatterValidationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             Scatter(self._write("# nothing here\n"))
 
-    def test_non_v1_version_rejected(self):
-        text = SCATTER_TEXT.replace("config_version: V1.1.2", "config_version: V2.0.0")
-        with self.assertRaises(ValueError):
-            Scatter(self._write(text))
+    def test_v2_version_accepted(self):
+        # SP Flash Tool emits V1.x and V2.0 YAML scatters; both must parse.
+        text = SCATTER_TEXT.replace("config_version: V1.1.2", "config_version: V2.0")
+        s = Scatter(self._write(text))
+        self.assertEqual(len(s.partitions), 4)
 
     def test_v1_accepted(self):
         s = Scatter(self._write(SCATTER_TEXT))
         self.assertEqual(len(s.partitions), 4)
+
+    def test_nand_storage_rejected(self):
+        text = SCATTER_TEXT.replace("storage: EMMC", "storage: NAND")
+        with self.assertRaises(ValueError):
+            Scatter(self._write(text))
 
 
 class RealScatterTest(unittest.TestCase):

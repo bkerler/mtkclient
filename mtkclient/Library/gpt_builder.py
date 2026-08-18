@@ -56,7 +56,9 @@ class GptPartitionEntry:
         self.flags = flags
 
     def pack(self) -> bytes:
-        name_utf16 = self.name.encode("utf-16-le")[:70]
+        # 72 bytes = 36 UTF-16 code units; truncate by code unit (not byte, which
+        # could split a surrogate pair) and leave a NUL terminator.
+        name_utf16 = self.name[:35].encode("utf-16-le")
         name_utf16 = name_utf16.ljust(72, b"\x00")
         return pack("<16s16sQQQ72s", self.type_guid, self.unique_guid,
                     self.first_lba, self.last_lba, self.flags, name_utf16)
@@ -150,6 +152,14 @@ class GPTBuilder:
             if e.last_lba < e.first_lba:
                 raise ValueError(f"Partition {e.name} has last_lba < first_lba")
 
+        # Reject overlapping partitions -- a malformed scatter or a resize
+        # miscalculation would otherwise produce a valid-CRC but corrupt table.
+        for a, b in zip(sorted(entries, key=lambda e: e.first_lba),
+                        sorted(entries, key=lambda e: e.first_lba)[1:]):
+            if b.first_lba <= a.last_lba:
+                raise ValueError(f"Partitions {a.name} (LBA {a.first_lba}-{a.last_lba}) "
+                                 f"and {b.name} (LBA {b.first_lba}-{b.last_lba}) overlap")
+
         entry_array = self._pack_entries(entries)
         entries_crc = crc32(entry_array) & 0xFFFFFFFF
 
@@ -211,10 +221,12 @@ def parse_existing_entries(data: bytes, sectorsize: int = 512):
         if int.from_bytes(type_guid, "little") == 0:
             continue
         unique_guid = entry[16:32]
-        flags = unpack("<Q", entry[40:48])[0]
+        # entry layout: type[0:16] unique[16:32] first_lba[32:40] last_lba[40:48]
+        # flags[48:56] name[56:128]. Flags are at 48, NOT 40 (that's last_lba).
+        flags = unpack("<Q", entry[48:56])[0]
         name = entry[56:128].decode("utf-16-le", errors="replace").rstrip("\x00")
         if name:
-            result[name] = (type_guid, unique_guid, flags)
+            result[name.lower()] = (type_guid, unique_guid, flags)
     return result, disk_guid
 
 

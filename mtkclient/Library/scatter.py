@@ -48,7 +48,10 @@ PSEUDO_ADDR_MAX = 0xFFFFFFFF
 # Names that describe the GPT tables themselves rather than a real partition.
 GPT_AREA_NAMES = {"pgpt", "sgpt", "pmt", "spmt"}
 
-# region -> mtkclient parttype (see storage.partitiontype_and_size)
+# region -> mtkclient parttype (see storage.partitiontype_and_size).
+# Keys are the EXACT strings SP Flash Tool serialises (verified against the
+# region enum table in FlashtoollibEx.dll): note EMMC_GP_1 (underscore),
+# EMMC_RPMP (MediaTek's spelling), and UFS_LU0_LU1 (the UFS preloader region).
 REGION_TO_PARTTYPE = {
     "EMMC_BOOT_1": "boot1",
     "EMMC_BOOT1": "boot1",
@@ -58,17 +61,19 @@ REGION_TO_PARTTYPE = {
     # bare preloader -- da_ws wraps it in an EMMC_BOOT/BRLYT boot header first
     # (see preloader_boot.wrap_preloader), otherwise the BROM can't boot boot1.
     "EMMC_BOOT1_BOOT2": "boot1",
-    "EMMC_RPMB": "rpmb",
-    "EMMC_GP1": "gp1",
-    "EMMC_GP2": "gp2",
-    "EMMC_GP3": "gp3",
-    "EMMC_GP4": "gp4",
+    "EMMC_RPMP": "rpmb",
+    "EMMC_GP_1": "gp1",
+    "EMMC_GP_2": "gp2",
+    "EMMC_GP_3": "gp3",
+    "EMMC_GP_4": "gp4",
     "EMMC_USER": "user",
-    # UFS scatters reuse the same field with UFS_ prefixes
+    # UFS regions. LU mapping follows the MTK convention (LU0=user, LU1/LU2=boot,
+    # LU0_LU1=preloader region) -- UNVERIFIED against a real UFS scatter; UFS
+    # preloader wrapping is refused anyway (see preloader_boot.VERIFIED_STORAGE).
     "UFS_LU0": "user",
     "UFS_LU1": "boot1",
     "UFS_LU2": "boot2",
-    "UFS_LU3": "rpmb",
+    "UFS_LU0_LU1": "boot1",
 }
 
 
@@ -184,24 +189,39 @@ class Scatter:
         self.block_size = 0x20000
         self.project = None
         self.config_version = None
+        # SP Flash Tool control flags (general section):
+        #   skip_pt_operate=true -> DA does NOT write PGPT/SGPT (skip repartition)
+        #   resize_check=false   -> do NOT resize NEEDRESIZE partitions
+        self.skip_pt_operate = False
+        self.skip_resize = False
         self._parse(filename)
         self._validate()
 
     def _validate(self):
         """Reject formats this parser can't handle instead of mis-flashing.
 
-        Only the SP Flash Tool v1 YAML text scatter (config_version V1.x, the
-        one paired with the xflash/legacy DA) is supported. Newer DAs (V6) are
-        driven with an XML scatter sent to the device, which this parser does
-        not produce and the ws flow does not use.
+        This parses the SP Flash Tool YAML text scatter. An XML scatter (newer
+        DAs) yields no partitions and is rejected below. We do NOT hard-reject
+        on config_version major: SP Flash Tool emits V1.x and V2.0 text scatters
+        and the schema is compatible; only warn on unknown majors.
         """
         if not self.partitions:
             raise ValueError(f"{self.filename}: no partitions parsed; not a "
-                             f"recognised SP Flash Tool v1 (YAML) scatter file")
+                             f"recognised SP Flash Tool (YAML) scatter file "
+                             f"(XML scatters are not supported)")
+        storage = str(self.storage or "").upper()
+        if storage and storage not in ("EMMC", "UFS"):
+            raise ValueError(f"{self.filename}: unsupported storage {self.storage!r}; "
+                             f"only EMMC and UFS scatters are supported (not NAND/NOR/COMBO)")
         ver = str(self.config_version or "")
-        if ver and not ver.upper().startswith("V1"):
-            raise ValueError(f"{self.filename}: unsupported scatter config_version "
-                             f"{self.config_version!r}; only V1 (YAML) scatters are supported")
+        if ver and not (ver.upper().startswith("V1") or ver.upper().startswith("V2")):
+            self.log_unknown_version(ver)
+
+    def log_unknown_version(self, ver):
+        # best-effort: keep going, but make the unknown schema visible
+        import sys
+        print(f"warning: {self.filename}: unrecognised scatter config_version {ver!r}; "
+              f"parsing anyway", file=sys.stderr)
 
     def _parse(self, filename: str):
         with open(filename, "r", encoding="utf-8", errors="replace") as rf:
@@ -216,12 +236,13 @@ class Scatter:
             if not stripped or stripped.startswith("#"):
                 continue
 
-            # A record starts at a top-level list item ("- key: value" at
-            # column 0). Nested list items (the "info:" sub-list) are indented,
-            # so they fall through to the key/value branch and merge into the
-            # record they belong to -- which is all we need for block_size etc.
-            is_toplevel_item = line.startswith("- ")
-            body = stripped[2:] if stripped.startswith("- ") else stripped
+            # A record starts at a list item ("- key: value"). Nested list items
+            # (the "info:" sub-list) merge into the record they belong to. A new
+            # record is only started for the "general"/"partition_index" keys, so
+            # indentation of the top-level item doesn't matter (robust to tools
+            # that indent list items).
+            is_list_item = stripped.startswith("- ")
+            body = stripped[2:] if is_list_item else stripped
 
             if ":" not in body:
                 continue
@@ -229,7 +250,7 @@ class Scatter:
             key = key.strip()
             val = _convert(value)
 
-            if is_toplevel_item and key in ("general", "partition_index"):
+            if is_list_item and key in ("general", "partition_index"):
                 current = {key: val}
                 records.append((key, current))
                 continue
@@ -246,6 +267,9 @@ class Scatter:
                 self.config_version = fields.get("config_version")
                 if fields.get("block_size"):
                     self.block_size = fields.get("block_size")
+                self.skip_pt_operate = bool(fields.get("skip_pt_operate", False))
+                if fields.get("resize_check") is False:
+                    self.skip_resize = True
             elif kind == "partition_index":
                 if fields.get("partition_name"):
                     self.partitions.append(ScatterPartition(fields))
@@ -266,7 +290,8 @@ class Scatter:
         real position depends on the resized userdata / device flash size.
         """
         return [p for p in self.partitions
-                if p.is_user_region and not p.is_pseudo and p.partition_size > 0]
+                if p.is_user_region and not p.is_pseudo and not p.is_reserved
+                and p.partition_size > 0]
 
     def dynamic_partitions(self):
         """Real user partitions whose address SP Flash Tool sets at flash time.

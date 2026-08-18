@@ -151,9 +151,13 @@ class RepartitionSafetyTest(unittest.TestCase):
         parts = self._parse_written_primary(dl)
         ud = parts["userdata"]
         earliest_dynamic = min(DEV["otp"][0], DEV["flashinfo"][0])
-        # userdata must end exactly one sector before the first dynamic partition
-        self.assertEqual(ud.sector + ud.sectors, earliest_dynamic)
-        # and it must be far bigger than the scatter's placeholder 0x40000
+        end = ud.sector + ud.sectors
+        # userdata must not run into the first dynamic partition ...
+        self.assertLessEqual(end, earliest_dynamic)
+        # ... its end is rounded down to the erase block (0x20000 / 512 = 256) ...
+        self.assertEqual(end % 256, 0)
+        self.assertGreater(end, earliest_dynamic - 256)  # but only by the alignment slack
+        # ... and it's far bigger than the scatter's placeholder 0x40000
         self.assertGreater(ud.sectors, 0x40000)
 
     def test_protected_move_aborts(self):
@@ -163,7 +167,9 @@ class RepartitionSafetyTest(unittest.TestCase):
         self.assertEqual(dl.writes, [])  # nothing written
 
     def test_protected_move_allowed_with_flag(self):
-        ok, dl = self._run(nvram_addr=0x9000, allow_data_loss=True)
+        # move nvram to sector 56 (differs from device's 64) without overlapping
+        # userdata (starts at sector 128); with the flag it must proceed.
+        ok, dl = self._run(nvram_addr=0x7000, allow_data_loss=True)
         self.assertTrue(ok)
         self.assertTrue(any(w.addr == 0 for w in dl.writes))
 

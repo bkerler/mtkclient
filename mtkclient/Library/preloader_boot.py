@@ -35,7 +35,7 @@ verified for (see wrap_preloader) rather than emit a header that could brick.
 The header is otherwise constant for a platform (it only points at the
 preloader region), so we reproduce it exactly.
 """
-from struct import pack
+from struct import pack, unpack
 
 EMMC_BOOT_MAGIC = b"EMMC_BOOT\x00\x00\x00"
 BRLYT_MAGIC = b"BRLYT\x00\x00\x00"
@@ -48,9 +48,17 @@ DEFAULT_REGION_SIZE = 0x40000  # 256 KiB main region (boundary = begin + size)
 # Block/rw unit per storage. eMMC = 512, UFS = 4096.
 DEV_RW_UNIT = {"emmc": 0x200, "ufs": 0x1000}
 
-# m_device_type (low byte of the BRLYT descriptor magic word, see below).
-DEVICE_TYPE = {"emmc": 0x05, "nand": 0x01, "nor": 0x02, "sf": 0x03, "ufs": 0x0B}
-GFH_TYPE_ARM_BL = 0x0001       # ARM bootloader GFH type
+# m_device_type = GfhFlashDev (bl_dev, u8). Values per the GFH enum
+# (Nor=1, NandSeq=2, NandTtbl=3, NandFdm50=4, EmmcBoot=5, EmmcData=6, Sf=7,
+# SpiNand=9, Ufs=12/0x0C, Combo=14/0x0E). Verified: eMMC=0x05 matches the dump.
+DEVICE_TYPE = {"emmc": 0x05, "nand": 0x02, "nor": 0x01, "sf": 0x07,
+               "ufs": 0x0C, "combo": 0x0E}
+GFH_TYPE_ARM_BL = 0x0001       # ARM bootloader GFH type (GfhFileType::ArmBl)
+
+# GFH_FILE_INFO of the preloader payload: "MMM\x01" ... "FILE_INFO", with a
+# max_size (boot-region size) field at offset 0x24.
+GFH_MAGIC = b"MMM\x01"
+GFH_MAX_SIZE_OFF = 0x24
 
 # The boot-region identifier that sits at offset 0 differs per storage.
 BOOT_MAGIC = {"emmc": b"EMMC_BOOT", "ufs": b"UFS_BOOT",
@@ -68,6 +76,22 @@ VERIFIED_STORAGE = ("emmc",)
 def is_wrapped(data: bytes) -> bool:
     """True if data already begins with any known boot-region header."""
     return any(data.startswith(m) for m in KNOWN_BOOT_MAGICS)
+
+
+def gfh_max_size(preloader: bytes):
+    """Boot-region size from the preloader's GFH max_size field, or None.
+
+    This is the authoritative region size (the DA aligns the boundary to it);
+    it is 0x40000 on this device but varies by preloader, so deriving it beats a
+    hardcoded constant.
+    """
+    if preloader[:4] != GFH_MAGIC or len(preloader) < GFH_MAX_SIZE_OFF + 4:
+        return None
+    val = unpack("<I", preloader[GFH_MAX_SIZE_OFF:GFH_MAX_SIZE_OFF + 4])[0]
+    # sanity: must be a power-of-two-ish region at least as big as the payload
+    if val < len(preloader) or val > 0x2000000:
+        return None
+    return val
 
 
 def build_boot_header(storage: str = "emmc", region_size: int = DEFAULT_REGION_SIZE) -> bytes:
@@ -116,13 +140,14 @@ def build_boot_header(storage: str = "emmc", region_size: int = DEFAULT_REGION_S
 
 
 def wrap_preloader(preloader: bytes, storage: str = "emmc",
-                   region_size: int = DEFAULT_REGION_SIZE) -> bytes:
+                   region_size: int = None) -> bytes:
     """Return boot header + preloader, ready to write raw to boot1.
 
-    If the input is already wrapped it is returned unchanged. Raises ValueError
-    if the preloader is too big for the boot region, or if the storage type is
-    not one we can build a verified header for (use the DA download command for
-    UFS/NAND/NOR instead).
+    If the input is already wrapped it is returned unchanged. The boot-region
+    size is taken from the preloader's GFH max_size (authoritative, per device),
+    falling back to 0x40000. Raises ValueError if the preloader is too big for
+    the region, or if the storage type is not one we can build a verified header
+    for (use the DA download command for UFS/NAND/NOR instead).
     """
     if is_wrapped(preloader):
         return preloader
@@ -130,6 +155,8 @@ def wrap_preloader(preloader: bytes, storage: str = "emmc",
         raise ValueError(
             f"software preloader wrapping is only verified for {VERIFIED_STORAGE} "
             f"(got {storage!r}); flash the preloader via the DA download command instead")
+    if region_size is None:
+        region_size = gfh_max_size(preloader) or DEFAULT_REGION_SIZE
     if len(preloader) > region_size:
         raise ValueError(f"preloader ({len(preloader)} bytes) exceeds boot region "
                          f"({region_size} bytes)")
