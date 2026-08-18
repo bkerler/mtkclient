@@ -89,12 +89,24 @@ class FakeDaLoader:
             storage=SimpleNamespace(flashsize=TOTAL_SECTORS * SECTOR, flashtype="emmc"))
 
     def readflash(self, addr, length, filename, parttype=None, display=True):
-        return self.gpt_bytes[:length].ljust(length, b"\x00")
+        data = self.gpt_bytes[:length].ljust(length, b"\x00") if addr == 0 \
+            else b"\xBB" * length  # stand-in device content for backups
+        if filename:
+            with open(filename, "wb") as wf:
+                wf.write(data)
+            return True
+        return data
 
     def writeflash(self, addr, length, filename="", offset=0, parttype=None,
                    wdata=None, display=True):
         self.writes.append(SimpleNamespace(addr=addr, parttype=parttype,
                                            wdata=bytes(wdata) if wdata else None))
+        return True
+
+    def formatflash(self, addr, length, partitionname, parttype, display=True):
+        if not hasattr(self, "formats"):
+            self.formats = []
+        self.formats.append(SimpleNamespace(addr=addr, length=length, name=partitionname))
         return True
 
 
@@ -121,13 +133,17 @@ class RepartitionSafetyTest(unittest.TestCase):
         self.Scatter = Scatter
 
     def _run(self, nvram_addr, allow_data_loss=False):
+        import shutil
         path = write_scatter(nvram_addr)
         self.addCleanup(os.remove, path)
+        backup_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, backup_dir, True)
         scatter = self.Scatter(path)
         dl = FakeDaLoader(device_gpt())
         h = make_handler(dl)
-        ok = h.da_ws_repartition(scatter, SECTOR, allow_data_loss=allow_data_loss)
-        return ok, dl
+        ok = h.da_ws_repartition(scatter, SECTOR, allow_data_loss=allow_data_loss,
+                                 backup_dir=backup_dir)
+        return ok, dl, backup_dir
 
     def _parse_written_primary(self, dl):
         primary = next(w.wdata for w in dl.writes if w.addr == 0 and w.parttype == "user")
@@ -137,7 +153,7 @@ class RepartitionSafetyTest(unittest.TestCase):
 
     def test_dynamic_partitions_placed_from_device(self):
         # nvram unchanged -> no conflict; otp/flashinfo taken from device GPT
-        ok, dl = self._run(nvram_addr=64 * SECTOR)
+        ok, dl, _bk = self._run(nvram_addr=64 * SECTOR)
         self.assertTrue(ok)
         parts = self._parse_written_primary(dl)
         self.assertIn("otp", parts)
@@ -146,7 +162,7 @@ class RepartitionSafetyTest(unittest.TestCase):
         self.assertEqual(parts["flashinfo"].sector, DEV["flashinfo"][0])
 
     def test_userdata_resized_before_dynamic(self):
-        ok, dl = self._run(nvram_addr=64 * SECTOR)
+        ok, dl, _bk = self._run(nvram_addr=64 * SECTOR)
         self.assertTrue(ok)
         parts = self._parse_written_primary(dl)
         ud = parts["userdata"]
@@ -162,16 +178,42 @@ class RepartitionSafetyTest(unittest.TestCase):
 
     def test_protected_move_aborts(self):
         # move nvram -> must refuse without allow_data_loss
-        ok, dl = self._run(nvram_addr=0x9000)  # different from device (64 sectors)
+        ok, dl, _bk = self._run(nvram_addr=0x9000)  # different from device (64 sectors)
         self.assertFalse(ok)
         self.assertEqual(dl.writes, [])  # nothing written
 
     def test_protected_move_allowed_with_flag(self):
         # move nvram to sector 56 (differs from device's 64) without overlapping
         # userdata (starts at sector 128); with the flag it must proceed.
-        ok, dl = self._run(nvram_addr=0x7000, allow_data_loss=True)
+        ok, dl, _bk = self._run(nvram_addr=0x7000, allow_data_loss=True)
         self.assertTrue(ok)
         self.assertTrue(any(w.addr == 0 for w in dl.writes))
+
+    def test_protected_backed_up_and_restored_to_new_pos(self):
+        # nvram moved to sector 56: it must be backed up to a file AND restored
+        # by a write to the NEW sector (56) so the device-unique data survives.
+        ok, dl, backup_dir = self._run(nvram_addr=0x7000, allow_data_loss=True)
+        self.assertTrue(ok)
+        self.assertTrue(os.path.exists(os.path.join(backup_dir, "nvram.img")))
+        restore = [w for w in dl.writes if w.parttype == "user" and w.addr == 56 * SECTOR]
+        self.assertEqual(len(restore), 1, "nvram must be restored to its new sector")
+
+    def test_no_move_still_backs_up(self):
+        # even with no move, protected data is backed up before touching the table
+        ok, dl, backup_dir = self._run(nvram_addr=64 * SECTOR)
+        self.assertTrue(ok)
+        self.assertTrue(os.path.exists(os.path.join(backup_dir, "nvram.img")))
+
+    def test_resized_userdata_is_formatted(self):
+        # the grown userdata must be formatted to its new full size
+        ok, dl, _bk = self._run(nvram_addr=64 * SECTOR)
+        self.assertTrue(ok)
+        fmts = [f for f in getattr(dl, "formats", []) if f.name == "userdata"]
+        self.assertEqual(len(fmts), 1)
+        parts = self._parse_written_primary(dl)
+        ud = parts["userdata"]
+        self.assertEqual(fmts[0].addr, ud.sector * SECTOR)
+        self.assertEqual(fmts[0].length, ud.sectors * SECTOR)
 
 
 if __name__ == "__main__":

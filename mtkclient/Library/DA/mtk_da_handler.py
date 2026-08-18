@@ -770,7 +770,8 @@ class DaHandler(metaclass=LogBase):
                 print(f"Failed to write {partfilename} to sector {str(pos // 0x200)} with " +
                       f"sector count {str(size // 0x200)}.")
 
-    def da_ws_repartition(self, scatter, sectorsize: int, allow_data_loss: bool = False) -> bool:
+    def da_ws_repartition(self, scatter, sectorsize: int, allow_data_loss: bool = False,
+                          backup_dir: str = None) -> bool:
         """Rebuild and write a GPT (primary + backup) from the scatter layout.
 
         This is the "repartition" step of a SP Flash Tool firmware upgrade: the
@@ -833,6 +834,7 @@ class DaHandler(metaclass=LogBase):
                                                      unique_guid=unique_guid, flags=flags))
 
         entries = []
+        resized = []  # (name, first_lba, last_lba) partitions to format afterwards
         for p in scatter.gpt_partitions():
             first = p.linear_start_addr // sectorsize
             if p.needs_resize and not scatter.skip_resize:
@@ -845,6 +847,7 @@ class DaHandler(metaclass=LogBase):
                 last = end_excl - 1
                 self.info(f"Resizing {p.name} to fill disk "
                           f"({(last - first + 1) * sectorsize // (1024 * 1024)} MB)")
+                resized.append((p.name, first, last))
             else:
                 last = first + p.size_lba(sectorsize) - 1
             type_guid, unique_guid, flags = guids(p.name)
@@ -882,12 +885,22 @@ class DaHandler(metaclass=LogBase):
             for name, cur, new in conflicts:
                 self.error(f"    {name}: device @ sectors {cur[0]}-{cur[1]} "
                            f"-> scatter @ {new[0]}-{new[1]}")
-            self.error("Back these up first, then re-run with allow_data_loss=True "
-                       "if you really intend to wipe them.")
+            self.error("Re-run with allow_data_loss=True to back them up and restore "
+                       "them at their new location, if you really intend to move them.")
             return False
-        if conflicts:
-            self.warning(f"Proceeding despite {len(conflicts)} protected-partition "
-                         f"layout change(s) (allow_data_loss set).")
+
+        # Back up device-unique (PROTECTED/BINREGION) partitions before touching
+        # the table, matching SP Flash Tool's FLASH-UPDATE backup_folder. They are
+        # restored to their new location after the GPT is written, so IMEI / NVRAM
+        # / calibration / keys survive a repartition.
+        new_pos = {(e.name or "").lower(): (e.first_lba, e.last_lba) for e in entries}
+        if backup_dir is None:
+            backup_dir = os.path.join(os.path.dirname(os.path.abspath(scatter.filename)),
+                                      "mtk_protected_backup")
+        try:
+            saved = self.da_ws_backup_protected(scatter, sectorsize, current_layout, backup_dir)
+        except RuntimeError:
+            return False
 
         try:
             primary, backup, backup_lba = builder.build(entries, total_sectors)
@@ -906,7 +919,58 @@ class DaHandler(metaclass=LogBase):
             self.error("Failed to write backup GPT.")
             return False
         self.info("New partition table written.")
+
+        # Restore backed-up protected data to its (possibly new) position.
+        for name, path, old_sectors in saved:
+            dest = new_pos.get(name.lower())
+            if dest is None:
+                self.warning(f"Protected {name} has no slot in the new table; "
+                             f"its backup is kept at {path}.")
+                continue
+            self.info(f"Restoring protected {name} -> sector {dest[0]}")
+            if not self.mtk.daloader.writeflash(addr=dest[0] * sectorsize,
+                                                length=os.stat(path).st_size,
+                                                filename=path, parttype="user"):
+                self.error(f"Failed to restore {name}; its backup is at {path}.")
+                return False
+
+        # Format the grown NEEDRESIZE partitions to the full new size, matching SP
+        # Flash Tool's auto-format (the image flashed afterwards overlays it). This
+        # is the "format then download" order.
+        for name, first, last in resized:
+            length = (last - first + 1) * sectorsize
+            self.info(f"Formatting resized {name} ({length // (1024 * 1024)} MB)")
+            if not self.mtk.daloader.formatflash(addr=first * sectorsize, length=length,
+                                                 partitionname=name, parttype="user",
+                                                 display=False):
+                self.warning(f"Format of {name} failed; Android will resize on first boot.")
         return True
+
+    def da_ws_backup_protected(self, scatter, sectorsize, current_layout, backup_dir):
+        """Read every device-unique partition present on the device to a file.
+
+        Returns [(name, backup_path, (first,last)), ...]. Mirrors SP Flash Tool's
+        pre-repartition backup of the __NODL_ / PROTECTED / BINREGION regions.
+        """
+        saved = []
+        prot_names = {(p.name or "").lower() for p in scatter.protected_partitions()}
+        if not prot_names:
+            return saved
+        os.makedirs(backup_dir, exist_ok=True)
+        for name in prot_names:
+            cur = current_layout.get(name)
+            if cur is None:
+                continue
+            first, last = cur
+            length = (last - first + 1) * sectorsize
+            path = os.path.join(backup_dir, f"{name}.img")
+            self.info(f"Backing up protected {name} ({length} bytes) -> {path}")
+            if not self.mtk.daloader.readflash(addr=first * sectorsize, length=length,
+                                               filename=path, parttype="user", display=False):
+                self.error(f"Failed to back up protected partition {name}; aborting.")
+                raise RuntimeError(f"protected backup of {name} failed")
+            saved.append((name, path, cur))
+        return saved
 
     def da_ws_write_image(self, name, path, part_addr, part_bytes):
         """Write one user-partition image to `part_addr`, expanding Android sparse
@@ -1008,7 +1072,9 @@ class DaHandler(metaclass=LogBase):
                       f"{os.stat(path).st_size:>12d} bytes  [{p.parttype}]")
 
         if repartition:
-            if not self.da_ws_repartition(scatter, sectorsize, allow_data_loss=allow_data_loss):
+            backup_dir = os.path.join(basedir, "mtk_protected_backup")
+            if not self.da_ws_repartition(scatter, sectorsize, allow_data_loss=allow_data_loss,
+                                          backup_dir=backup_dir):
                 self.close()
                 return False
 

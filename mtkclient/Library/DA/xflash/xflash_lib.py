@@ -684,6 +684,92 @@ class DAXFlash(metaclass=LogBase):
                 self.error(f"Error on writing data: {self.eh.status(status)}")
         return False
 
+    def cmd_download(self, addr, size, storage=DaStorage.MTK_DA_STORAGE_EMMC,
+                     parttype=EmmcPartitionType.MTK_DA_EMMC_PART_USER, bintype=0):
+        """DA DOWNLOAD command (opcode 0x010001).
+
+        Unlike WRITE_DATA, this drives the DA's download engine: it unpacks
+        Android sparse images on-device (bintype selects sparse), verifies the
+        storage checksum, and -- crucially -- is accepted by secured/stock DAs
+        that reject WRITE_DATA ("cmd_write_data is not allowed(...)"). Same
+        parameter block as WRITE_DATA, with bin_type carrying the image type.
+        """
+        if self.xsend(self.cmd.DOWNLOAD):
+            status = self.status()
+            if status == 0:
+                ne = NandExtension()
+                param = pack("<IIQQ", storage, parttype, addr, size)
+                param += pack("<IIIIIIII", ne.cellusage, ne.addr_type, bintype, ne.region,
+                              ne.format_level, ne.sys_slc_percent, ne.usr_slc_percent,
+                              ne.phy_max_size)
+                if self.send_param(param):
+                    return True
+            else:
+                self.error(f"Error on download cmd: {self.eh.status(status)}")
+        return False
+
+    def download(self, addr, length, filename: str = "", parttype=None, wdata=None,
+                 sparse: bool = False, display=True):
+        """Write an image via the DA DOWNLOAD command (see cmd_download).
+
+        For sparse=True the raw sparse file is streamed and the DA expands it.
+        Mirrors writeflash's data phase. EXPERIMENTAL: the exact bin_type values
+        and the secured-DA handshake need validation on real hardware, so this is
+        not wired into the default flash path yet.
+        """
+        SPARSE_BINTYPE = 0x1  # DA image type: sparse (validate on device)
+        fh = None
+        fill = 0
+        if filename:
+            if not os.path.exists(filename):
+                self.error(f"Filename doesn't exist: {filename}")
+                return False
+            length = min(os.stat(filename).st_size, length) if length else os.stat(filename).st_size
+            fh = open(filename, "rb")
+        if length % 512 != 0:
+            fill = 512 - (length % 512)
+            length += fill
+        partinfo = self.daconfig.storage.get_storage(parttype, length)
+        if not partinfo:
+            return False
+        storage, parttype, plength = partinfo
+        length = min(length, plength)
+        bintype = SPARSE_BINTYPE if sparse else 0
+        pg = progress(total=length, prefix="Download:", guiprogress=self.mtk.config.guiprogress)
+        write_packet_size = self.get_packet_length().write_packet_length
+        if not self.cmd_download(addr, length, storage, parttype, bintype):
+            if fh:
+                fh.close()
+            return False
+        try:
+            pos, bytestowrite = 0, length
+            while bytestowrite > 0:
+                dsize = min(write_packet_size, bytestowrite)
+                data = bytearray(fh.read(dsize)) if fh else bytearray(wdata[pos:pos + dsize])
+                if len(data) % 512 != 0:
+                    data += (512 - (len(data) % 512)) * b"\x00"
+                if display:
+                    pg.update(len(data))
+                checksum = sum(data) & 0xFFFF
+                if not self.send_param([pack("<I", 0x0), pack("<I", checksum), data]):
+                    self.error("Error on download at pos 0x%08X" % pos)
+                    return False
+                bytestowrite -= dsize
+                pos += dsize
+            status = self.status()
+            if status == 0x0:
+                self.send_devctrl(self.cmd.CC_OPTIONAL_DOWNLOAD_ACT)
+                if display:
+                    pg.done()
+                return True
+            self.error(f"Error on download: {self.eh.status(status)}")
+        except Exception as e:
+            self.error(str(e))
+        finally:
+            if fh:
+                fh.close()
+        return False
+
     def cmd_read_data(self, addr, size, storage=DaStorage.MTK_DA_STORAGE_EMMC,
                       parttype=EmmcPartitionType.MTK_DA_EMMC_PART_USER):
         if self.xsend(self.cmd.READ_DATA):
