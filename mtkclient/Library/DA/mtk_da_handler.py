@@ -770,6 +770,164 @@ class DaHandler(metaclass=LogBase):
                 print(f"Failed to write {partfilename} to sector {str(pos // 0x200)} with " +
                       f"sector count {str(size // 0x200)}.")
 
+    def da_ws_repartition(self, scatter, sectorsize: int) -> bool:
+        """Rebuild and write a GPT (primary + backup) from the scatter layout.
+
+        This is the "repartition" step of a SP Flash Tool firmware upgrade: the
+        on-flash partition table is replaced with one derived from the scatter's
+        linear_start_addr / partition_size fields. Existing type/unique GUIDs are
+        preserved by name so a re-flash keeps the device's own identifiers.
+        """
+        from mtkclient.Library.gpt_builder import (GPTBuilder, GptPartitionEntry,
+                                                   parse_existing_entries, BASIC_DATA_TYPE_GUID)
+        flashsize = self.mtk.daloader.daconfig.storage.flashsize
+        if not flashsize:
+            self.error("Couldn't determine flash size; cannot repartition.")
+            return False
+        total_sectors = flashsize // sectorsize
+
+        # Read the current primary GPT so we can preserve type/unique GUIDs.
+        existing = b""
+        try:
+            existing = self.mtk.daloader.readflash(addr=0, length=0x8000, filename="",
+                                                   parttype="user", display=False)
+        except Exception as err:
+            self.debug(f"Couldn't read existing GPT: {err}")
+        name_map, disk_guid = parse_existing_entries(existing or b"", sectorsize)
+
+        builder = GPTBuilder(sectorsize=sectorsize, disk_guid=disk_guid)
+        entries = []
+        for p in scatter.gpt_partitions():
+            first = p.linear_start_addr // sectorsize
+            last = first + p.size_lba(sectorsize) - 1
+            if p.name in name_map:
+                type_guid, unique_guid, flags = name_map[p.name]
+            else:
+                type_guid, unique_guid, flags = BASIC_DATA_TYPE_GUID, None, 0
+                self.info(f"New partition {p.name}: assigning basic-data type GUID")
+            entries.append(GptPartitionEntry(p.name, first, last, type_guid=type_guid,
+                                             unique_guid=unique_guid, flags=flags))
+        try:
+            primary, backup, backup_lba = builder.build(entries, total_sectors)
+        except ValueError as err:
+            self.error(f"Refusing to write an invalid GPT: {err}")
+            return False
+
+        self.info(f"Writing new GPT: {len(entries)} partitions, "
+                  f"disk {total_sectors} sectors ({flashsize // (1024 * 1024)} MB)")
+        if not self.mtk.daloader.writeflash(addr=0, length=len(primary), filename="",
+                                            wdata=primary, parttype="user"):
+            self.error("Failed to write primary GPT.")
+            return False
+        if not self.mtk.daloader.writeflash(addr=backup_lba * sectorsize, length=len(backup),
+                                            filename="", wdata=backup, parttype="user"):
+            self.error("Failed to write backup GPT.")
+            return False
+        self.info("New partition table written.")
+        return True
+
+    def da_ws(self, scatterfile: str, repartition: bool = False, skip_preloader: bool = False):
+        """Flash a full firmware described by a SP Flash Tool scatter file.
+
+        Default (Download Only): write every is_download partition into the
+        device's existing partitions. With repartition=True (Firmware Upgrade):
+        rebuild the GPT from the scatter first, then flash by scatter address.
+        """
+        from mtkclient.Library.scatter import Scatter
+
+        if not os.path.exists(scatterfile):
+            self.error(f"Scatter file {scatterfile} doesn't exist.")
+            self.close()
+            return False
+        scatter = Scatter(scatterfile)
+        basedir = os.path.dirname(os.path.abspath(scatterfile))
+        sectorsize = self.config.pagesize or 0x200
+
+        # Build the flash plan and verify every referenced image exists first.
+        plan = []
+        missing = []
+        for p in scatter.download_partitions():
+            if skip_preloader and p.name.lower() == "preloader":
+                self.info("Skipping preloader (--skip_preloader).")
+                continue
+            if p.is_pseudo:
+                self.warning(f"Skipping pseudo partition {p.name}.")
+                continue
+            path = os.path.join(basedir, p.file_name)
+            if not os.path.exists(path):
+                missing.append(p.file_name)
+                continue
+            plan.append((p, path))
+
+        if missing:
+            self.error("Scatter references image files that are missing:")
+            for m in missing:
+                self.error(f"    {m}")
+            self.close()
+            return False
+        if not plan:
+            self.error("No downloadable partitions with images found in scatter.")
+            self.close()
+            return False
+
+        self.info(f"Scatter : {scatterfile}")
+        self.info(f"Platform: {scatter.platform}  Storage: {scatter.storage}  "
+                  f"Sectorsize: {sectorsize}")
+        self.info(f"Mode    : {'Firmware Upgrade (repartition)' if repartition else 'Download Only'}")
+        self.info("Partitions to flash:")
+        for p, path in plan:
+            self.info(f"    {p.name:22s} <- {os.path.basename(path):32s} "
+                      f"{os.stat(path).st_size:>12d} bytes  [{p.parttype}]")
+
+        if repartition:
+            if not self.da_ws_repartition(scatter, sectorsize):
+                self.close()
+                return False
+
+        allok = True
+        for p, path in plan:
+            size = os.stat(path).st_size
+            if p.is_boot_region:
+                # preloader / boot1 / boot2: write at the scatter address in that region
+                self.info(f"Writing {p.name} -> {p.parttype} @ {hex(p.linear_start_addr)}")
+                ok = self.mtk.daloader.writeflash(addr=p.linear_start_addr, length=size,
+                                                  filename=path, parttype=p.parttype)
+            elif repartition:
+                # layout is the one we just wrote: flash straight to the scatter address
+                self.info(f"Writing {p.name} @ {hex(p.linear_start_addr)}")
+                ok = self.mtk.daloader.writeflash(addr=p.linear_start_addr, length=size,
+                                                  filename=path, parttype="user")
+            else:
+                # Download Only: resolve the partition by name in the device GPT
+                res = self.mtk.daloader.detect_partition(p.name, "user")
+                if not res[0]:
+                    self.error(f"Partition {p.name} not found on device; skipping. "
+                               f"(use --repartition to lay down a new table)")
+                    allok = False
+                    continue
+                rpartition = res[1]
+                partbytes = rpartition.sectors * sectorsize
+                if size > partbytes:
+                    self.error(f"{os.path.basename(path)} ({size} bytes) is larger than "
+                               f"partition {p.name} ({partbytes} bytes); skipping.")
+                    allok = False
+                    continue
+                self.info(f"Writing {p.name} @ sector {rpartition.sector}")
+                ok = self.mtk.daloader.writeflash(addr=rpartition.sector * sectorsize,
+                                                  length=partbytes, filename=path,
+                                                  parttype="user")
+            if ok:
+                print(f"Wrote {os.path.basename(path)} to {p.name}.")
+            else:
+                print(f"Failed to write {os.path.basename(path)} to {p.name}.")
+                allok = False
+
+        if allok:
+            self.info("Scatter flash completed successfully.")
+        else:
+            self.warning("Scatter flash completed with errors (see above).")
+        return allok
+
     def da_efuse(self):
         if self.mtk.config.chipconfig.efuse_addr is not None:
             base = self.mtk.config.chipconfig.efuse_addr
@@ -1356,6 +1514,10 @@ class DaHandler(metaclass=LogBase):
             parttype = args.parttype
             filenames = filename.split(",")
             self.da_wf(filenames=filenames, parttype=parttype)
+        elif cmd == "ws":
+            self.da_ws(scatterfile=args.scatterfile,
+                       repartition=getattr(args, "repartition", False),
+                       skip_preloader=getattr(args, "skip_preloader", False))
         elif cmd == "e":
             partitionname = args.partitionname
             parttype = args.parttype

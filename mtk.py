@@ -23,6 +23,7 @@ CMDS_HELP = {
     "w": "Write partition from filename",
     "wf": "Write flash from filename",
     "wl": "Write partitions from directory path to flash",
+    "ws": "Write full firmware from a SP Flash Tool scatter file (add --repartition to rewrite the GPT)",
     "wo": "Write flash starting at offset from filename",
     "e": "Erase partition",
     "es": "Erase partition with sector count",
@@ -143,7 +144,7 @@ def main():
 
     common_cmds = [
         "printgpt", "gpt", "r", "rl", "rf", "rs", "ro",
-        "w", "wf", "wl", "wo", "e", "es", "ess", "footer"
+        "w", "wf", "wl", "ws", "wo", "e", "es", "ess", "footer"
     ]
 
     cmd_parsers = {}
@@ -167,6 +168,14 @@ def main():
     # Directory based
     for cmd in ["rl", "gpt", "wl"]:
         cmd_parsers[cmd].add_argument("directory", help="Directory path")
+
+    # Scatter based (full firmware flash)
+    cmd_parsers["ws"].add_argument("scatterfile", help="Path to the MTK scatter .txt file")
+    cmd_parsers["ws"].add_argument('--repartition', action="store_true", default=False,
+                                   help='Rewrite the GPT from the scatter layout before flashing '
+                                        '(SP Flash Tool "Firmware Upgrade"). Default is download-only.')
+    cmd_parsers["ws"].add_argument('--skip_preloader', action="store_true", default=False,
+                                   help='Do not flash the preloader partition')
 
     # Full flash image
     for cmd in ["rf", "wf"]:
