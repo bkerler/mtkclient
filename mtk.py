@@ -180,6 +180,11 @@ def main():
                                    help='Allow --repartition to move/resize PROTECTED partitions '
                                         '(nvram, nvcfg, proinfo, ...). This DESTROYS their '
                                         'device-unique data. Off by default.')
+    cmd_parsers["ws"].add_argument('--da_download', action="store_true", default=False,
+                                   help='Write images via the DA DOWNLOAD command (SP Flash Tool '
+                                        'path: DA-side sparse unpack + checksum, works on secured '
+                                        'DAs) instead of host-side WRITE_DATA. EXPERIMENTAL - '
+                                        'validate on your device.')
 
     # Full flash image
     for cmd in ["rf", "wf"]:

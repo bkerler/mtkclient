@@ -66,5 +66,55 @@ class CmdDownloadTest(unittest.TestCase):
         self.assertEqual(self.x.params, [])  # no data sent when the cmd is refused
 
 
+class DaWsWriteImageRoutingTest(unittest.TestCase):
+    """da_ws_write_image must route to the DA download() when da_download=True."""
+
+    def _handler(self, has_download=True):
+        import os
+        from mtkclient.Library.DA.mtk_da_handler import DaHandler
+        calls = []
+        da = SimpleNamespace()
+        if has_download:
+            da.download = lambda **kw: (calls.append(kw), True)[1]
+        daloader = SimpleNamespace(
+            da=da,
+            writeflash=lambda **kw: (calls.append(("writeflash", kw)), True)[1])
+        h = DaHandler.__new__(DaHandler)
+        h.mtk = SimpleNamespace(daloader=daloader)
+        for m in ("info", "debug", "warning", "error"):
+            setattr(h, m, lambda *a, **k: None)
+        return h, calls
+
+    def _img(self, sparse=False):
+        import tempfile, os
+        from struct import pack
+        fd, path = tempfile.mkstemp(suffix=".img")
+        with os.fdopen(fd, "wb") as wf:
+            if sparse:
+                wf.write(pack("<IHHHHIIII", 0xED26FF3A, 1, 0, 28, 12, 4096, 1, 1, 0))
+                wf.write(pack("<HHII", 0xCAC1, 0, 1, 12 + 4096) + b"\x00" * 4096)
+            else:
+                wf.write(b"\x11" * 4096)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def test_routes_to_da_download(self):
+        h, calls = self._handler(has_download=True)
+        path = self._img(sparse=True)
+        ok = h.da_ws_write_image("super", path, 0x8000, None, da_download=True)
+        self.assertTrue(ok)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["addr"], 0x8000)
+        self.assertTrue(calls[0]["sparse"])
+
+    def test_falls_back_when_no_download(self):
+        h, calls = self._handler(has_download=False)
+        path = self._img(sparse=False)
+        ok = h.da_ws_write_image("boot", path, 0x8000, None, da_download=True)
+        self.assertTrue(ok)
+        # no da.download -> host-side writeflash used
+        self.assertTrue(any(c[0] == "writeflash" for c in calls if isinstance(c, tuple)))
+
+
 if __name__ == "__main__":
     unittest.main()

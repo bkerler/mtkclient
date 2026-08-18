@@ -972,12 +972,30 @@ class DaHandler(metaclass=LogBase):
             saved.append((name, path, cur))
         return saved
 
-    def da_ws_write_image(self, name, path, part_addr, part_bytes):
+    def da_ws_write_image(self, name, path, part_addr, part_bytes, da_download=False):
         """Write one user-partition image to `part_addr`, expanding Android sparse
         images on the fly (super/userdata are usually sparse). part_bytes is the
         partition size for the fit check (None to skip). Returns True on success.
+
+        With da_download=True the raw image (sparse included) is handed to the DA
+        DOWNLOAD command, which unpacks/checksums on-device -- the SP Flash Tool
+        path (needed for secured DAs). Falls back to the host-side path if the DA
+        doesn't expose download().
         """
         from mtkclient.Library.sparse import is_sparse_file, SparseImage
+        da = getattr(self.mtk.daloader, "da", None)
+        if da_download and hasattr(da, "download"):
+            sparse = is_sparse_file(path)
+            if part_bytes is not None and sparse:
+                with SparseImage(path) as img:
+                    if img.expanded_size > part_bytes:
+                        self.error(f"{os.path.basename(path)} expands to {img.expanded_size} "
+                                   f"bytes, larger than partition {name} ({part_bytes}); skipping.")
+                        return False
+            self.info(f"Downloading {name} @ {hex(part_addr)} via DA "
+                      f"({'sparse' if sparse else 'raw'})")
+            return da.download(addr=part_addr, length=os.stat(path).st_size, filename=path,
+                               parttype="user", sparse=sparse)
         if is_sparse_file(path):
             with SparseImage(path) as img:
                 expanded = img.expanded_size
@@ -1003,7 +1021,7 @@ class DaHandler(metaclass=LogBase):
                                             parttype="user")
 
     def da_ws(self, scatterfile: str, repartition: bool = False, skip_preloader: bool = False,
-              allow_data_loss: bool = False):
+              allow_data_loss: bool = False, da_download: bool = False):
         """Flash a full firmware described by a SP Flash Tool scatter file.
 
         Default (Download Only): write every is_download partition into the
@@ -1106,7 +1124,8 @@ class DaHandler(metaclass=LogBase):
                                                   filename=path, parttype=p.parttype)
             elif repartition:
                 # layout is the one we just wrote: flash straight to the scatter address
-                ok = self.da_ws_write_image(p.name, path, p.linear_start_addr, None)
+                ok = self.da_ws_write_image(p.name, path, p.linear_start_addr, None,
+                                            da_download=da_download)
             else:
                 # Download Only: resolve the partition by name in the device GPT
                 res = self.mtk.daloader.detect_partition(p.name, "user")
@@ -1118,7 +1137,7 @@ class DaHandler(metaclass=LogBase):
                 rpartition = res[1]
                 partbytes = rpartition.sectors * sectorsize
                 ok = self.da_ws_write_image(p.name, path, rpartition.sector * sectorsize,
-                                            partbytes)
+                                            partbytes, da_download=da_download)
             if ok:
                 print(f"Wrote {os.path.basename(path)} to {p.name}.")
             else:
@@ -1721,7 +1740,8 @@ class DaHandler(metaclass=LogBase):
             self.da_ws(scatterfile=args.scatterfile,
                        repartition=getattr(args, "repartition", False),
                        skip_preloader=getattr(args, "skip_preloader", False),
-                       allow_data_loss=getattr(args, "allow_data_loss", False))
+                       allow_data_loss=getattr(args, "allow_data_loss", False),
+                       da_download=getattr(args, "da_download", False))
         elif cmd == "e":
             partitionname = args.partitionname
             parttype = args.parttype
