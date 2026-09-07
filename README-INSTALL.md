@@ -128,6 +128,48 @@ pip3 install PySide6 libusb
 pip3 install -r requirements.txt
 ```
 
+#### macOS Apple Silicon (M1/M2/M3) notes
+
+On Apple Silicon Macs, a few extra steps are needed beyond the generic macOS instructions above:
+
+1. **Install Homebrew Python (3.10 or newer) instead of relying on the system Python.**
+   The system Python on Apple Silicon is often outdated and can fail to build native
+   dependencies. Use the Homebrew version:
+   ```shell
+   brew install python@3.10
+   python3.10 -m venv mtk_venv
+   source mtk_venv/bin/activate
+   ```
+
+2. **Build capstone from source.** There are no prebuilt arm64 wheels for the
+   pinned capstone version, so the `--no-binary` flag is required:
+   ```shell
+   pip3 install --pre --no-binary capstone capstone
+   ```
+
+3. **Install libusb via Homebrew.** It is keg-only, so make sure the loader can
+   find it if libusb-dependent wheels fail to detect it:
+   ```shell
+   brew install libusb
+   export DYLD_LIBRARY_PATH="$(brew --prefix libusb)/lib:$DYLD_LIBRARY_PATH"
+   ```
+
+4. **Approve the macFUSE system extension.** On Apple Silicon, kernel extensions
+   require user approval and reduced security mode:
+   - After running `brew install macfuse`, open **System Settings → Privacy & Security**
+     and click **Allow** for the blocked system software from Benjamin Fleischer.
+   - If the extension is still blocked, boot into **Recovery mode**, select
+     **Utilities → Startup Security Utility → Reduced Security**, and enable
+     **"Allow user management of kernel extensions from identified developers"**.
+   - **Reboot** after approval.
+
+5. **GUI (mtk_gui) on arm64.** PySide6 ships universal2/arm64 wheels, so the GUI
+   works on Apple Silicon, but if it fails to start, make sure your venv is created
+   from the Homebrew (arm64) Python and not an x86_64 Python under Rosetta:
+   ```shell
+   file "$(command -v python3)"   # should report arm64
+   ```
+
 ---------------------------------------------------------------------------------------------------------------
 ### Use kamakiri (optional, only needed for mt6260 or older)
 
