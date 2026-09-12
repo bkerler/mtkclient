@@ -120,14 +120,15 @@ class DaHandler(metaclass=LogBase):
                 step = self.mtk.step
                 mtk.preloader.dump_internal_flash(offset=offset,length=length,step=step,filename="internal_flash.bin")
         else:
-            if mtk.serialportname is not None:
-                mtk.preloader.init()
             if directory:
                 self.mtk.config.hwparam_path = directory
             if mtk.port.cdc.connected and os.path.exists(os.path.join(mtk.config.hwparam_path, ".state")):
                 mtk.daloader.reinit()
                 mtk.reinited = True
                 return mtk
+            else:
+                # Device found via USB but no DA state — likely BROM mode already connected
+                mtk.preloader.init(directory=directory)
         if mtk.config.target_config is None:
             self.info("Please disconnect, start mtkclient and reconnect.")
             return None
