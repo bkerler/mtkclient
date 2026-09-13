@@ -172,9 +172,11 @@ class DaHandler(metaclass=LogBase):
                     mtk.daloader.patch = True
                     self.info("Unprotected device, we assume we can patch directly !")
                 else:
-                    if not self.mtk.config.stock:
+                    if not self.mtk.config.stock and self.mtk.config.ptype != "carbonara":
                         mtk = mtk.bypass_security()  # Needed for dumping preloader
                         bypassedsecurity = True
+                    elif self.mtk.config.ptype == "carbonara":
+                        self.info("Using signed DA1 for an explicit Carbonara attempt. Skipping BROM exploitation!")
                     else:
                         self.info("Using supplied preloader. Skipping exploitation!")
 

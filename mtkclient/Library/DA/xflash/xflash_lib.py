@@ -1153,7 +1153,10 @@ class DAXFlash(metaclass=LogBase):
                 self.info("Uploading stage 2...")
                 stage = stage + 1
                 loaded = False
-                if not self.mtk.daloader.patch and not self.mtk.config.stock and connagent == b"preloader":
+                carbonara_agent = connagent == b"preloader" or (
+                    connagent == b"brom" and self.mtk.config.ptype == "carbonara"
+                )
+                if not self.mtk.daloader.patch and not self.mtk.config.stock and carbonara_agent:
                     if (self.carbonara is not None and
                             self.mtk.config.target_config["sbc"]):
                         # Do NOT patch da1 on usage of carbonara
