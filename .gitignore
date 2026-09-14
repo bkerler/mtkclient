@@ -14,3 +14,9 @@ DA_*.bin
 # Pyinstaller stuff
 build
 dist
+
+# runtime state / scratch
+.state
+hwparam.json
+boot1_dump.bin
+*_dump.bin

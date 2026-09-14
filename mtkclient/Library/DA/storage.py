@@ -38,7 +38,10 @@ class EmmcPartitionType:
     MTK_DA_EMMC_PART_GP4 = 7
     MTK_DA_EMMC_PART_USER = 8
     MTK_DA_EMMC_PART_END = 9
-    MTK_DA_EMMC_BOOT1_BOOT2 = 10
+    # NOTE: section type 10 (EMMC_BOOT1_BOOT2) is NOT a valid write_data storage
+    # section -- the DA rejects it with 0xc003000c. The preloader is wrapped in
+    # software (preloader_boot.py) and written to boot1 instead. Do not add a
+    # parttype that maps here.
 
 
 class UFSPartitionType:
@@ -285,30 +288,33 @@ class Storage(metaclass=LogBase):
                     length = min(length, self.emmc.rpmb_size)
             else:
                 self.error(
-                    "Unknown parttype. Known parttypes are \"boot1\",\"boot2\",\"gp1\",\"gp2\",\"gp3\",\"gp4\",\"rpmb\"")
+                    "Unknown parttype. Known parttypes are \"boot1\",\"boot2\","
+                    "\"gp1\",\"gp2\",\"gp3\",\"gp4\",\"rpmb\"")
                 return []
         elif storage == DaStorage.MTK_DA_STORAGE_UFS:
+            # UFS type -> physical LU: BOOT1(1)=LU0, BOOT2(2)=LU1, USER(3)=LU2,
+            # RPMB(4)=LU3. flashsize must be the matching LU's size.
             if parttype == "user" or parttype is None:
                 if not xml:
                     parttype = UFSPartitionType.USER
-                    self.flashsize = self.ufs.lu0_size
+                    self.flashsize = self.ufs.lu2_size
                 else:
                     parttype = "UFS-LUA2"
                     self.flashsize = self.ufs.lu2_size
             elif parttype == "boot1":
                 if not xml:
                     parttype = UFSPartitionType.BOOT1
-                    self.flashsize = self.ufs.lu1_size
+                    self.flashsize = self.ufs.lu0_size
                 else:
                     parttype = "UFS-LUA0"
                     self.flashsize = self.ufs.lu0_size
             elif parttype == "boot2":
                 if not xml:
                     parttype = UFSPartitionType.BOOT2
-                    self.flashsize = self.ufs.lu2_size
+                    self.flashsize = self.ufs.lu1_size
                 else:
                     parttype = "UFS-LUA1"
-                    self.flashsize = self.ufs.lu0_size
+                    self.flashsize = self.ufs.lu1_size
             elif parttype == "rpmb":
                 if not xml:
                     parttype = UFSPartitionType.RPMB

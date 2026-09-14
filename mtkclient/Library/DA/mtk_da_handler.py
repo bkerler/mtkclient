@@ -20,6 +20,24 @@ except ImportError:
     FUSE = None
 
 
+def ws_file_resolver(scatterfile, basedir):
+    """Build a resolver mapping a path the DA requests (during FLASH-ALL) to a
+    local file. The DA references files by the paths inside the scatter (e.g.
+    'D:/scatter.xml', 'D:/boot.img'); we serve them by basename from basedir,
+    and any 'scatter' request from the actual scatter file.
+    """
+    scatter_names = {"scatter.xml", os.path.basename(scatterfile).lower()}
+
+    def resolve(requested):
+        base = str(requested).replace("\\", "/").split("/")[-1]
+        if base.lower() in scatter_names or base.lower().startswith("scatter"):
+            return scatterfile
+        cand = os.path.join(basedir, base)
+        return cand if os.path.exists(cand) else None
+
+    return resolve
+
+
 class efuse_runtime_def:
     addr = None
     mask = None
@@ -770,6 +788,454 @@ class DaHandler(metaclass=LogBase):
                 print(f"Failed to write {partfilename} to sector {str(pos // 0x200)} with " +
                       f"sector count {str(size // 0x200)}.")
 
+    def da_ws_repartition(self, scatter, sectorsize: int, allow_data_loss: bool = False,
+                          backup_dir: str = None) -> bool:
+        """Rebuild and write a GPT (primary + backup) from the scatter layout.
+
+        This is the "repartition" step of a SP Flash Tool firmware upgrade: the
+        on-flash partition table is replaced with one derived from the scatter's
+        linear_start_addr / partition_size fields. Existing type/unique GUIDs are
+        preserved by name so a re-flash keeps the device's own identifiers.
+        """
+        from mtkclient.Library.gpt_builder import (GPTBuilder, GptPartitionEntry,
+                                                   parse_existing_entries, parse_existing_layout,
+                                                   BASIC_DATA_TYPE_GUID)
+        if scatter.skip_pt_operate:
+            # SP Flash Tool honours this flag by NOT touching PGPT/SGPT.
+            self.info("scatter has skip_pt_operate=true; leaving the partition "
+                      "table unchanged.")
+            return True
+        flashsize = self.mtk.daloader.daconfig.storage.flashsize
+        if not flashsize:
+            self.error("Couldn't determine flash size; cannot repartition.")
+            return False
+        total_sectors = flashsize // sectorsize
+
+        # Read the current primary GPT: preserve type/unique GUIDs AND learn the
+        # device's current layout so we can protect device-unique data.
+        existing = b""
+        try:
+            existing = self.mtk.daloader.readflash(addr=0, length=0x8000, filename="",
+                                                   parttype="user", display=False)
+        except Exception as err:
+            self.debug(f"Couldn't read existing GPT: {err}")
+        name_map, disk_guid = parse_existing_entries(existing or b"", sectorsize)
+        current_layout = parse_existing_layout(existing or b"", sectorsize)
+
+        builder = GPTBuilder(sectorsize=sectorsize, disk_guid=disk_guid)
+        last_usable = builder.last_usable_lba(total_sectors)
+
+        def guids(name):
+            key = (name or "").lower()
+            if key in name_map:
+                return name_map[key]
+            self.info(f"New partition {name}: assigning basic-data type GUID")
+            return BASIC_DATA_TYPE_GUID, None, 0
+
+        # Dynamically-addressed partitions (otp, flashinfo, ...) ARE real GPT
+        # entries, but their address is computed at flash time (they live after
+        # the resized userdata). We can't invent that layout safely, so we take
+        # their true position from the device's current GPT. Anything we can't
+        # locate is skipped with a warning rather than mis-placed.
+        dynamic_entries = []
+        earliest_dynamic = last_usable + 1  # userdata may grow up to here if no dynamics
+        for p in scatter.dynamic_partitions():
+            cur = current_layout.get((p.name or "").lower())
+            if cur is None:
+                self.warning(f"Dynamic partition {p.name} not found in the device's "
+                             f"current GPT; leaving it out of the new table.")
+                continue
+            first, last = cur
+            earliest_dynamic = min(earliest_dynamic, first)
+            type_guid, unique_guid, flags = guids(p.name)
+            dynamic_entries.append(GptPartitionEntry(p.name, first, last, type_guid=type_guid,
+                                                     unique_guid=unique_guid, flags=flags))
+
+        entries = []
+        resized = []  # (name, first_lba, last_lba) partitions to format afterwards
+        for p in scatter.gpt_partitions():
+            first = p.linear_start_addr // sectorsize
+            if p.needs_resize and not scatter.skip_resize:
+                # NEEDRESIZE (userdata): the scatter size is a placeholder; SP Flash
+                # Tool grows it to fill the space up to the trailing dynamic
+                # partitions (or the end of the disk if there are none), rounded
+                # DOWN to the flash erase-block so the tail stays aligned.
+                blk_sectors = max(1, scatter.block_size // sectorsize)
+                end_excl = (earliest_dynamic // blk_sectors) * blk_sectors
+                last = end_excl - 1
+                self.info(f"Resizing {p.name} to fill disk "
+                          f"({(last - first + 1) * sectorsize // (1024 * 1024)} MB)")
+                resized.append((p.name, first, last))
+            else:
+                last = first + p.size_lba(sectorsize) - 1
+            type_guid, unique_guid, flags = guids(p.name)
+            entries.append(GptPartitionEntry(p.name, first, last, type_guid=type_guid,
+                                             unique_guid=unique_guid, flags=flags))
+        entries.extend(dynamic_entries)
+
+        # Warn about device partitions that the new table would drop -- their
+        # data becomes unreachable. (SP Flash Tool's DA backs up device-unique
+        # regions before repartition via FLASH-UPDATE's backup_folder; we cannot
+        # do that host-side, so at least make the loss visible.)
+        new_names = {(e.name or "").lower() for e in entries}
+        for dev_name in current_layout:
+            if dev_name not in new_names:
+                self.warning(f"Device partition {dev_name!r} is not in the new "
+                             f"layout and will be dropped -- back it up if it holds data.")
+
+        # SAFETY: refuse to move/resize device-unique partitions (nvram, nvcfg,
+        # proinfo, protect*, ...). A moved PROTECTED partition means its data
+        # (IMEI, calibration, keys) is silently lost. Only proceed if the new
+        # layout keeps every protected partition exactly where it already is,
+        # unless the caller explicitly accepts data loss.
+        conflicts = []
+        for p in scatter.protected_partitions():
+            new_first = p.linear_start_addr // sectorsize
+            new_last = new_first + p.size_lba(sectorsize) - 1
+            cur = current_layout.get((p.name or "").lower())
+            if cur is None:
+                continue  # not currently present; nothing to lose
+            if cur != (new_first, new_last):
+                conflicts.append((p.name, cur, (new_first, new_last)))
+        if conflicts and not allow_data_loss:
+            self.error("Refusing to repartition: the new layout would move/resize "
+                       "device-unique (PROTECTED) partitions, destroying their data:")
+            for name, cur, new in conflicts:
+                self.error(f"    {name}: device @ sectors {cur[0]}-{cur[1]} "
+                           f"-> scatter @ {new[0]}-{new[1]}")
+            self.error("Re-run with allow_data_loss=True to back them up and restore "
+                       "them at their new location, if you really intend to move them.")
+            return False
+
+        # Back up device-unique (PROTECTED/BINREGION) partitions before touching
+        # the table, matching SP Flash Tool's FLASH-UPDATE backup_folder. They are
+        # restored to their new location after the GPT is written, so IMEI / NVRAM
+        # / calibration / keys survive a repartition.
+        new_pos = {(e.name or "").lower(): (e.first_lba, e.last_lba) for e in entries}
+        if backup_dir is None:
+            backup_dir = os.path.join(os.path.dirname(os.path.abspath(scatter.filename)),
+                                      "mtk_protected_backup")
+        try:
+            saved = self.da_ws_backup_protected(scatter, sectorsize, current_layout, backup_dir)
+        except RuntimeError:
+            return False
+
+        try:
+            primary, backup, backup_lba = builder.build(entries, total_sectors)
+        except ValueError as err:
+            self.error(f"Refusing to write an invalid GPT: {err}")
+            return False
+
+        self.info(f"Writing new GPT: {len(entries)} partitions, "
+                  f"disk {total_sectors} sectors ({flashsize // (1024 * 1024)} MB)")
+        if not self.mtk.daloader.writeflash(addr=0, length=len(primary), filename="",
+                                            wdata=primary, parttype="user"):
+            self.error("Failed to write primary GPT.")
+            return False
+        if not self.mtk.daloader.writeflash(addr=backup_lba * sectorsize, length=len(backup),
+                                            filename="", wdata=backup, parttype="user"):
+            self.error("Failed to write backup GPT.")
+            return False
+        self.info("New partition table written.")
+
+        # Restore backed-up protected data to its (possibly new) position.
+        for name, path, old_sectors in saved:
+            dest = new_pos.get(name.lower())
+            if dest is None:
+                self.warning(f"Protected {name} has no slot in the new table; "
+                             f"its backup is kept at {path}.")
+                continue
+            self.info(f"Restoring protected {name} -> sector {dest[0]}")
+            if not self.mtk.daloader.writeflash(addr=dest[0] * sectorsize,
+                                                length=os.stat(path).st_size,
+                                                filename=path, parttype="user"):
+                self.error(f"Failed to restore {name}; its backup is at {path}.")
+                return False
+
+        # Format the grown NEEDRESIZE partitions to the full new size, matching SP
+        # Flash Tool's auto-format (the image flashed afterwards overlays it). This
+        # is the "format then download" order.
+        for name, first, last in resized:
+            length = (last - first + 1) * sectorsize
+            self.info(f"Formatting resized {name} ({length // (1024 * 1024)} MB)")
+            if not self.mtk.daloader.formatflash(addr=first * sectorsize, length=length,
+                                                 partitionname=name, parttype="user",
+                                                 display=False):
+                self.warning(f"Format of {name} failed; Android will resize on first boot.")
+        return True
+
+    def da_ws_backup_protected(self, scatter, sectorsize, current_layout, backup_dir):
+        """Read every device-unique partition present on the device to a file.
+
+        Returns [(name, backup_path, (first,last)), ...]. Mirrors SP Flash Tool's
+        pre-repartition backup of the __NODL_ / PROTECTED / BINREGION regions.
+        """
+        saved = []
+        prot_names = {(p.name or "").lower() for p in scatter.protected_partitions()}
+        if not prot_names:
+            return saved
+        os.makedirs(backup_dir, exist_ok=True)
+        for name in prot_names:
+            cur = current_layout.get(name)
+            if cur is None:
+                continue
+            first, last = cur
+            length = (last - first + 1) * sectorsize
+            path = os.path.join(backup_dir, f"{name}.img")
+            self.info(f"Backing up protected {name} ({length} bytes) -> {path}")
+            if not self.mtk.daloader.readflash(addr=first * sectorsize, length=length,
+                                               filename=path, parttype="user", display=False):
+                self.error(f"Failed to back up protected partition {name}; aborting.")
+                raise RuntimeError(f"protected backup of {name} failed")
+            saved.append((name, path, cur))
+        return saved
+
+    def da_ws_write_image(self, name, path, part_addr, part_bytes, da_download=False):
+        """Write one user-partition image to `part_addr`, expanding Android sparse
+        images on the fly (super/userdata are usually sparse). part_bytes is the
+        partition size for the fit check (None to skip). Returns True on success.
+
+        With da_download=True the raw image (sparse included) is handed to the DA
+        DOWNLOAD command, which unpacks/checksums on-device -- the SP Flash Tool
+        path (needed for secured DAs). Falls back to the host-side path if the DA
+        doesn't expose download().
+        """
+        from mtkclient.Library.sparse import is_sparse_file, SparseImage
+        da = getattr(self.mtk.daloader, "da", None)
+        if da_download and hasattr(da, "download"):
+            sparse = is_sparse_file(path)
+            if part_bytes is not None and sparse:
+                with SparseImage(path) as img:
+                    if img.expanded_size > part_bytes:
+                        self.error(f"{os.path.basename(path)} expands to {img.expanded_size} "
+                                   f"bytes, larger than partition {name} ({part_bytes}); skipping.")
+                        return False
+            self.info(f"Downloading {name} @ {hex(part_addr)} via DA "
+                      f"({'sparse' if sparse else 'raw'})")
+            return da.download(addr=part_addr, length=os.stat(path).st_size, filename=path,
+                               parttype="user", sparse=sparse)
+        if is_sparse_file(path):
+            with SparseImage(path) as img:
+                expanded = img.expanded_size
+                if part_bytes is not None and expanded > part_bytes:
+                    self.error(f"{os.path.basename(path)} expands to {expanded} bytes, "
+                               f"larger than partition {name} ({part_bytes} bytes); skipping.")
+                    return False
+                self.info(f"Writing {name} (sparse -> {expanded} bytes) @ {hex(part_addr)}")
+                for offset, data in img.regions():
+                    if not self.mtk.daloader.writeflash(addr=part_addr + offset, length=len(data),
+                                                        filename="", wdata=data,
+                                                        parttype="user", display=False):
+                        self.error(f"Failed writing {name} at offset {hex(offset)}")
+                        return False
+                return True
+        size = os.stat(path).st_size
+        if part_bytes is not None and size > part_bytes:
+            self.error(f"{os.path.basename(path)} ({size} bytes) is larger than "
+                       f"partition {name} ({part_bytes} bytes); skipping.")
+            return False
+        self.info(f"Writing {name} @ {hex(part_addr)}")
+        return self.mtk.daloader.writeflash(addr=part_addr, length=size, filename=path,
+                                            parttype="user")
+
+    def da_ws_layout_matches(self, scatter) -> bool:
+        """True if every fixed scatter partition sits at the same offset on the
+        device. Used to gate Download-Only, matching SP Flash Tool's refusal when
+        the on-device table differs. Returns True (allow) when there's no device
+        GPT to compare (fresh device) or it can't be read.
+        """
+        from mtkclient.Library.gpt_builder import parse_existing_layout
+        sectorsize = self.config.pagesize or 0x200
+        try:
+            existing = self.mtk.daloader.readflash(addr=0, length=0x8000, filename="",
+                                                   parttype="user", display=False)
+        except Exception:
+            return True
+        layout = parse_existing_layout(existing or b"", sectorsize)
+        if not layout:
+            return True
+        for p in scatter.gpt_partitions():
+            cur = layout.get((p.name or "").lower())
+            if cur is None:
+                self.warning(f"Partition {p.name} in the scatter is not on the device.")
+                return False
+            if cur[0] != p.linear_start_addr // sectorsize:
+                self.warning(f"Partition {p.name} is at device sector {cur[0]}, "
+                             f"scatter wants {p.linear_start_addr // sectorsize}.")
+                return False
+        return True
+
+    def da_ws(self, scatterfile: str, repartition: bool = False, skip_preloader: bool = False,
+              allow_data_loss: bool = False, da_download: bool = False):
+        """Flash a full firmware described by a SP Flash Tool scatter file.
+
+        Default (Download Only): write every is_download partition into the
+        device's existing partitions. With repartition=True (Firmware Upgrade):
+        rebuild the GPT from the scatter first, then flash by scatter address.
+
+        NOTE: this is the HOST-SIDE path (eMMC + patched DA only). SP Flash Tool
+        instead delegates to the DA -- v5 via the DOWNLOAD command (opcode
+        0x010001), v6 by sending the scatter as XML and issuing FLASH-ALL /
+        FLASH-UPDATE. The DA then builds the boot header, writes PGPT/SGPT,
+        resizes (DEV_DA_SET_DYNAMIC_PARTITION_SPACE), expands sparse images,
+        backs up + restores PROTECTED regions, and verifies per-image checksums
+        -- and it works on secured (SBC/DAA/SLA) and UFS/NAND devices, which this
+        WRITE_DATA path cannot. Exact SPFT parity requires driving those DA
+        commands (in progress), not extending this host-side reimplementation.
+
+        Current host-side gaps vs SPFT: WRITE_DATA is refused by a stock/secured
+        DA and cannot do DA-side sparse ("sparse image is not support in this
+        stage!"); resized userdata is not reformatted; no per-image checksum
+        verify; no PROTECTED backup/restore; eMMC only.
+        """
+        from mtkclient.Library.scatter import Scatter
+
+        if not os.path.exists(scatterfile):
+            self.error(f"Scatter file {scatterfile} doesn't exist.")
+            self.close()
+            return False
+        scatter = Scatter(scatterfile)
+        basedir = os.path.dirname(os.path.abspath(scatterfile))
+        sectorsize = self.config.pagesize or 0x200
+
+        # On a v6 (XML) DA, delegate the whole flash to the DA's FLASH-ALL /
+        # FLASH-UPDATE, exactly like SP Flash Tool v6 (the DA builds the boot
+        # header, GPT, resizes, unsparses, backs up PROTECTED regions, verifies
+        # checksums). Only reachable on a real v6 device.
+        da = getattr(self.mtk.daloader, "da", None)
+        if hasattr(da, "flash_all"):
+            resolver = ws_file_resolver(scatterfile, basedir)
+            self.info("v6 XML DA detected: delegating to DA FLASH-"
+                      f"{'UPDATE' if repartition else 'ALL'}.")
+            return da.flash_all(resolver, update=repartition)
+
+        # NAND / NOR / COMBO use a PMT (not a GPT), BMT bad-block relocation, a
+        # NAND-specific boot header and page addressing -- all handled inside the
+        # DA. Delegate every write to the DA download command; the host does not
+        # rebuild the table.
+        if not scatter.is_gpt_storage:
+            if not da_download:
+                self.info(f"{scatter.storage}: delegating writes to the DA "
+                          f"(PMT/BMT/boot header are DA-managed).")
+            da_download = True
+            if repartition:
+                self.info(f"{scatter.storage} uses a DA-managed PMT; the host does "
+                          f"not rebuild it -- flashing images only.")
+                repartition = False
+
+        # Build the flash plan and verify every referenced image exists first.
+        plan = []
+        missing = []
+        for p in scatter.download_partitions():
+            if skip_preloader and p.name.lower() == "preloader":
+                self.info("Skipping preloader (--skip_preloader).")
+                continue
+            if p.is_pseudo:
+                self.warning(f"Skipping pseudo partition {p.name}.")
+                continue
+            path = os.path.join(basedir, p.file_name)
+            if not os.path.exists(path):
+                missing.append(p.file_name)
+                continue
+            plan.append((p, path))
+
+        if missing:
+            self.error("Scatter references image files that are missing:")
+            for m in missing:
+                self.error(f"    {m}")
+            self.close()
+            return False
+        if not plan:
+            self.error("No downloadable partitions with images found in scatter.")
+            self.close()
+            return False
+
+        self.info(f"Scatter : {scatterfile}")
+        self.info(f"Platform: {scatter.platform}  Storage: {scatter.storage}  "
+                  f"Sectorsize: {sectorsize}")
+        self.info(f"Mode    : {'Firmware Upgrade (repartition)' if repartition else 'Download Only'}")
+        self.info("Partitions to flash:")
+        for p, path in plan:
+            self.info(f"    {p.name:22s} <- {os.path.basename(path):32s} "
+                      f"{os.stat(path).st_size:>12d} bytes  [{p.parttype}]")
+
+        if repartition:
+            backup_dir = os.path.join(basedir, "mtk_protected_backup")
+            if not self.da_ws_repartition(scatter, sectorsize, allow_data_loss=allow_data_loss,
+                                          backup_dir=backup_dir):
+                self.close()
+                return False
+        elif not self.da_ws_layout_matches(scatter):
+            # SP Flash Tool refuses a Download-Only when the scatter's partition
+            # table differs from the device ("GPT/PMT Changed ... FW upgrade or
+            # Format all first"). Do the same instead of writing to a stale table.
+            self.error("Scatter layout differs from the device's partition table; "
+                       "re-run with --repartition (Firmware Upgrade) to lay down the "
+                       "new table first.")
+            self.close()
+            return False
+
+        allok = True
+        for p, path in plan:
+            size = os.stat(path).st_size
+            if p.is_preloader:
+                storage = self.mtk.daloader.daconfig.storage.flashtype or "emmc"
+                da_obj = getattr(self.mtk.daloader, "da", None)
+                if da_download and hasattr(da_obj, "download"):
+                    # Let the DA build the boot header (works for eMMC/UFS/NAND/
+                    # COMBO). The DA reads the raw GFH preloader and wraps it.
+                    self.info(f"Writing {p.name} -> boot1 via DA (DA builds header)")
+                    ok = da_obj.download(addr=0, length=size, filename=path,
+                                         parttype="boot1")
+                else:
+                    # Host-side boot header (EMMC_BOOT/BRLYT for eMMC/UFS). NAND/NOR
+                    # raise, so we fail cleanly rather than write a bricking header.
+                    from mtkclient.Library.preloader_boot import wrap_preloader
+                    with open(path, "rb") as rf:
+                        try:
+                            wrapped = wrap_preloader(rf.read(), storage=storage)
+                        except ValueError as err:
+                            self.error(f"Skipping preloader: {err} (use --da_download to "
+                                       f"let the DA build the header)")
+                            allok = False
+                            continue
+                    self.info(f"Writing {p.name} -> boot1 @ 0x0 "
+                              f"(boot-header-wrapped, {len(wrapped)} bytes)")
+                    ok = self.mtk.daloader.writeflash(addr=0, length=len(wrapped),
+                                                      filename="", wdata=wrapped, parttype="boot1")
+            elif p.is_boot_region:
+                # other boot-region images: write at the scatter address in that region
+                self.info(f"Writing {p.name} -> {p.parttype} @ {hex(p.linear_start_addr)}")
+                ok = self.mtk.daloader.writeflash(addr=p.linear_start_addr, length=size,
+                                                  filename=path, parttype=p.parttype)
+            elif repartition:
+                # layout is the one we just wrote: flash straight to the scatter address
+                ok = self.da_ws_write_image(p.name, path, p.linear_start_addr, None,
+                                            da_download=da_download)
+            else:
+                # Download Only: resolve the partition by name in the device GPT
+                res = self.mtk.daloader.detect_partition(p.name, "user")
+                if not res[0]:
+                    self.error(f"Partition {p.name} not found on device; skipping. "
+                               f"(use --repartition to lay down a new table)")
+                    allok = False
+                    continue
+                rpartition = res[1]
+                partbytes = rpartition.sectors * sectorsize
+                ok = self.da_ws_write_image(p.name, path, rpartition.sector * sectorsize,
+                                            partbytes, da_download=da_download)
+            if ok:
+                print(f"Wrote {os.path.basename(path)} to {p.name}.")
+            else:
+                print(f"Failed to write {os.path.basename(path)} to {p.name}.")
+                allok = False
+
+        if allok:
+            self.info("Scatter flash completed successfully.")
+        else:
+            self.warning("Scatter flash completed with errors (see above).")
+        return allok
+
     def da_efuse(self):
         if self.mtk.config.chipconfig.efuse_addr is not None:
             base = self.mtk.config.chipconfig.efuse_addr
@@ -1356,6 +1822,12 @@ class DaHandler(metaclass=LogBase):
             parttype = args.parttype
             filenames = filename.split(",")
             self.da_wf(filenames=filenames, parttype=parttype)
+        elif cmd == "ws":
+            self.da_ws(scatterfile=args.scatterfile,
+                       repartition=getattr(args, "repartition", False),
+                       skip_preloader=getattr(args, "skip_preloader", False),
+                       allow_data_loss=getattr(args, "allow_data_loss", False),
+                       da_download=getattr(args, "da_download", False))
         elif cmd == "e":
             partitionname = args.partitionname
             parttype = args.parttype
