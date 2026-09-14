@@ -128,18 +128,25 @@ class UsbClass(DeviceClass):
         self.EP_IN = None
         self.EP_OUT = None
         self.is_serial = False
+        self._libusb_dll = None
         self.queue = Queue()
         if sys.platform.startswith('freebsd') or sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
             self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.so")
         elif sys.platform.startswith('win32'):
-            if calcsize("P") * 8 == 64:
-                self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.dll")
-            else:
-                self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb32-1.0.dll")
+            # Prefer the bundled libusb DLL shipped with mtkclient (mtkclient/Windows)
+            import os as _os
+            _bundled = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), 'Windows',
+                                     'libusb-1.0.dll' if calcsize("P") * 8 == 64 else 'libusb32-1.0.dll')
+            _use = _bundled if _os.path.exists(_bundled) else _os.path.basename(_bundled)
+            self._libusb_dll = _use
+            self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: _use)
         if self.backend is not None:
             try:
                 self.backend.lib.libusb_set_option.argtypes = [c_void_p, c_int]
-                self.backend.lib.libusb_set_option(self.backend.ctx, 1)
+                # NOTE: disabled USE_USBDK option - UsbDk enumeration is broken on
+                # this Windows build (26200); plain WinUSB/libusb0 enumeration works.
+                # self.backend.lib.libusb_set_option(self.backend.ctx, 1)
+                pass
             except Exception:
                 self.backend = None
 
@@ -295,6 +302,25 @@ class UsbClass(DeviceClass):
     def flush(self):
         return
 
+    def _get_fallback_backend(self):
+        # On Windows, "Access denied" (errno 13) means the port is bound to a
+        # kernel driver. libusb0 (if installed) or the bundled libusb1 with the
+        # UsbDk option (UsbDk detours the device from the kernel driver) can
+        # still access it.
+        backend = usb.backend.libusb0.get_backend()
+        if backend is not None:
+            return backend
+        if self._libusb_dll is None:
+            return None
+        try:
+            backend = usb.backend.libusb1.get_backend(find_library=lambda x: self._libusb_dll)
+            if backend is not None:
+                backend.lib.libusb_set_option.argtypes = [c_void_p, c_int]
+                backend.lib.libusb_set_option(backend.ctx, 1)  # USE_USDK
+        except Exception:
+            return None
+        return backend
+
     def connect(self, ep_in=-1, ep_out=-1, devclass=0x2):
         if self.connected:
             self.close()
@@ -302,14 +328,25 @@ class UsbClass(DeviceClass):
         self.device = None
         self.EP_OUT = None
         self.EP_IN = None
+        def find_matching_device(devices):
+            for dev in list(filter(lambda x: x.idVendor in [0x0E8D, 0x1004, 0x22d9, 0x0FCE], devices)):
+                if dev.idVendor in self.portconfig and dev.idProduct in self.portconfig[dev.idVendor]:
+                    return dev
+            return None
+
         devices = usb.core.find(find_all=True, bDeviceClass=devclass, backend=self.backend)
-        for dev in list(filter(lambda x: x.idVendor in [0x0E8D, 0x1004, 0x22d9, 0x0FCE], devices)):
-            if dev.idVendor in self.portconfig and dev.idProduct in self.portconfig[dev.idVendor]:
-                self.device = dev
-                self.vid = dev.idVendor
-                self.pid = dev.idProduct
-                self.interface = self.portconfig[dev.idVendor][dev.idProduct]
-                break
+        dev = find_matching_device(devices)
+        if dev is None:
+            # Some MTK preloader ports report device class 0x00 (class on interface
+            # level) and are missed by the class-filtered scan; rescan unfiltered
+            # since the portconfig VID/PID check above is the real gate.
+            devices = usb.core.find(find_all=True, backend=self.backend)
+            dev = find_matching_device(devices)
+        if dev is not None:
+            self.device = dev
+            self.vid = dev.idVendor
+            self.pid = dev.idProduct
+            self.interface = self.portconfig[dev.idVendor][dev.idProduct]
         if self.device is None:
             self.debug("Couldn't detect the device. Is it connected ?")
             return False
@@ -317,11 +354,27 @@ class UsbClass(DeviceClass):
             self.configuration = self.device.get_active_configuration()
         except usb.core.USBError as e:
             if e.strerror == "Configuration not set":
-                self.device.set_configuration()
-                self.configuration = self.device.get_active_configuration()
-            if e.errno == 13:
-                self.backend = usb.backend.libusb0.get_backend()
-                self.device = usb.core.find(idVendor=self.vid, idProduct=self.pid, backend=self.backend)
+                try:
+                    self.device.set_configuration()
+                    self.configuration = self.device.get_active_configuration()
+                except usb.core.USBError:
+                    pass
+            if self.configuration is None and e.errno == 13:
+                backend = self._get_fallback_backend()
+                if backend is not None:
+                    try:
+                        device = usb.core.find(idVendor=self.vid, idProduct=self.pid, backend=backend)
+                        if device is not None:
+                            try:
+                                device.set_configuration()
+                            except usb.core.USBError:
+                                pass
+                            self.backend = backend
+                            self.device = device
+                            self.configuration = device.get_active_configuration()
+                            self.info("Access denied with default backend, connected via fallback backend.")
+                    except usb.core.USBError as e2:
+                        self.debug(f"Fallback backend failed: {str(e2)}")
         if self.configuration is None:
             self.error("Couldn't get device configuration.")
             return False
@@ -335,6 +388,11 @@ class UsbClass(DeviceClass):
                 else:
                     self.interface = interfacenum
                     break
+            if self.interface == -1:
+                # Vendor-specific port (e.g. MTK preloader, interfaces 0xFF):
+                # no interface matches the requested class, use the first one.
+                self.interface = 0
+                self.debug("No interface matched devclass, using interface 0.")
 
         self.debug(self.configuration)
         if self.interface > self.configuration.bNumInterfaces:

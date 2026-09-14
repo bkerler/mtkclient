@@ -49,6 +49,25 @@ class Port(metaclass=LogBase):
         else:
             self.__logger.setLevel(logging.INFO)
 
+    def wait_for_device(self, max_attempts=300, interval=2, wait=True):
+        # Retry loop - wait for the device to be plugged in (BROM) instead of failing immediately
+        for attempt in range(max_attempts):
+            try:
+                self.cdc.connected = self.cdc.connect()
+            except Exception as err:
+                self.warning(f"USB enumeration error: {str(err)} - retrying...")
+                self.cdc.connected = False
+            if self.cdc.connected:
+                return True
+            if not wait:
+                return False
+            if attempt == 0:
+                self.info("Waiting for device... plug the powered-off phone with USB cable (BROM mode)")
+            elif attempt % 15 == 0:
+                self.info(f"Still waiting for device... ({attempt * interval}s elapsed)")
+            time.sleep(interval)
+        return False
+
     def run_serial_handshake(self):
         try:  # Support for serial port where ep_out is unknown
             if hasattr(self.cdc, 'ep_out'):
@@ -87,11 +106,11 @@ class Port(metaclass=LogBase):
     def serial_handshake(self, maxtries=None, loop=0):
         counter = 0
         if not self.cdc.connected:
-            self.cdc.connected = self.cdc.connect()
+            self.wait_for_device(max_attempts=1, wait=False)
         while 1:  # Workaround for serial port
             try:
                 if not self.cdc.connected:
-                    self.cdc.connected = self.cdc.connect()
+                    self.wait_for_device(max_attempts=1, wait=False)
                 if maxtries is not None and counter == maxtries:
                     break
                 counter += 1
@@ -180,7 +199,7 @@ class Port(metaclass=LogBase):
                 if maxtries is not None and counter == maxtries:
                     break
                 counter += 1
-                if self.cdc.connect() and self.run_handshake():
+                if self.wait_for_device(max_attempts=1, wait=False) and self.run_handshake():
                     return True
                 else:
                     if loop == 5:

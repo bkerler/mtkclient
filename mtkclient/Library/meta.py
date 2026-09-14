@@ -46,7 +46,7 @@ class META(metaclass=LogBase):
             try:
                 if maxtries is not None and counter == maxtries:
                     break
-                cdc.connected = cdc.connect()
+                cdc.connected = self.mtk.port.wait_for_device(max_attempts=1, wait=False)
                 if cdc.connected and cdc.pid == 0x2000:
                     counter += 1
                     ep_out = cdc.EP_OUT.write

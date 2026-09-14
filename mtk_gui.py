@@ -178,7 +178,7 @@ def getDevInfo(thread, parameters):
     mtk_class = _devhandler.da_handler.mtk
     da_handler = _devhandler.da_handler
     try:
-        if not mtk_class.port.cdc.connect():
+        if not mtk_class.port.wait_for_device(max_attempts=1, wait=False):
             mtk_class.preloader.init()
         else:
             with lock:
