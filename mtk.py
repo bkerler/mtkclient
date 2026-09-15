@@ -92,6 +92,9 @@ def add_exploit_group(parser):
     g.add_argument('--skipwdt', action='store_true', help='Skip wdt init')
     g.add_argument('--crash', action='store_true', help='Enforce crash if device is in pl mode')
     g.add_argument('--appid', help='Use app id (hexstring)')
+    g.add_argument('--plstage', action='store_true',
+                   help='Boot the device with --preloader first, then run the command. '
+                        'Requires --preloader <path>.')
 
 def add_gpt_group(parser):
     g = parser.add_argument_group("GPT & Partition")

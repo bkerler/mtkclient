@@ -299,24 +299,10 @@ class Main(metaclass=LogBase):
         if mtk is not None:
             if preloader is not None:
                 if os.path.exists(preloader):
-                    daaddr, dadata = mtk.parse_preloader(preloader)
-                    if mtk.preloader.send_da(daaddr, len(dadata), 0x100, dadata):
-                        self.info(f"Sent preloader to {hex(daaddr)}, length {hex(len(dadata))}")
-                        if mtk.preloader.jump_da(daaddr):
-                            self.info(f"Jumped to pl {hex(daaddr)}.")
-                            time.sleep(2)
-                            config = MtkConfig(loglevel=self.__logger.level, gui=mtk.config.gui,
-                                               guiprogress=mtk.config.guiprogress)
-                            mtk = Mtk(loglevel=self.__logger.level, config=config,
-                                      serialportname=mtk.port.serialportname)
-                            res = mtk.preloader.init()
-                            if not res:
-                                self.error("Error on loading preloader")
-                                return
-                            else:
-                                self.info("Successfully connected to pl.")
-                                # mtk.preloader.get_hw_sw_ver()
-                                # status=mtk.preloader.jump_to_partition(b"") # Do not remove !
+                    mtk = mtk.boot_preloader(preloader)
+                    if mtk is None:
+                        self.error("Error on jumping to pl")
+                        return
                 else:
                     self.error("Error on jumping to pl")
                     return
@@ -712,6 +698,16 @@ class Main(metaclass=LogBase):
             self.close()
         else:
             # DA / FLash commands start here
+            if getattr(self.args, "plstage", False) and cmd not in {"script", "multi"}:
+                if self.args.preloader is None or not os.path.exists(self.args.preloader):
+                    self.error("--plstage requires --preloader <path> to a valid preloader file")
+                    self.close()
+                    return
+                mtk = mtk.boot_preloader(self.args.preloader)
+                if mtk is None:
+                    self.error("--plstage: failed to boot into custom preloader")
+                    self.close()
+                    return
             da_handler = DaHandler(mtk, loglevel)
             mtk.offset = 0
             try:
