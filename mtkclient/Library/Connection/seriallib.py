@@ -207,13 +207,29 @@ class SerialClass(DeviceClass):
             timeout = 0.02
         if resplen is None:
             resplen = self.device.in_waiting
+
+        # Some serial transports can return a transient empty read
+        # before a fixed-length response has fully arrived. For
+        # multi-byte reads, tolerate short empty gaps while preserving
+        # the caller's overall timeout when it is longer.
+        retry_empty_reads = resplen is not None and resplen > 1
+        read_deadline = (
+            time.monotonic() + max(timeout, 0.25)
+            if retry_empty_reads
+            else None
+        )
+        read_timeout = (
+            min(timeout, 0.05)
+            if retry_empty_reads
+            else timeout
+        )
         # if resplen <= 0:
         #    self.info("Warning !")
         res = bytearray()
         loglevel = self.loglevel
         if self.device is None:
             return b""
-        self.device.timeout = timeout
+        self.device.timeout = read_timeout
         epr = self.device.read
         q = self.queue
         extend = res.extend
@@ -228,6 +244,12 @@ class SerialClass(DeviceClass):
             try:
                 val = epr(bytestoread)
                 if len(val) == 0:
+                    if (
+                        retry_empty_reads
+                        and time.monotonic() < read_deadline
+                    ):
+                        time.sleep(0.005)
+                        continue
                     break
                 if len(val) > bytestoread:
                     self.warning("Buffer overflow")
