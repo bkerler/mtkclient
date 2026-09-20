@@ -161,7 +161,7 @@ class SerialClass(DeviceClass):
                         return False
                     pass
         self.verify_data(bytearray(command), "TX:")
-        self.device.flushOutput()
+        self.device.flush()
         # timeout = 0
         time.sleep(0.005)
         """
@@ -196,8 +196,8 @@ class SerialClass(DeviceClass):
 
     def flush(self):
         if self.get_device() is not None:
-            self.device.flushOutput()
-        return self.device.flush()
+            return self.device.flush()
+        return None
 
     def usbread(self, resplen=None, maxtimeout=0, timeout=0, w_max_packet_size=None):
         # print("Reading {} bytes".format(resplen))
