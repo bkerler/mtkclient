@@ -129,6 +129,15 @@ class DaHandler(metaclass=LogBase):
                 mtk.reinited = True
                 return mtk
         if mtk.config.target_config is None:
+            # The USB layer can report a successful control connection even though no
+            # session was actually established (observed in BROM mode, where the device
+            # is found by vid/pid before the preloader handshake is attempted). In that
+            # case preloader.init() above was skipped entirely and target_config stayed
+            # None, so every DA/flash command failed with a misleading
+            # "Please disconnect, start mtkclient and reconnect." and no other output.
+            # Initialise the preloader explicitly before giving up.
+            mtk.preloader.init(directory=directory)
+        if mtk.config.target_config is None:
             self.info("Please disconnect, start mtkclient and reconnect.")
             return None
         return mtk
