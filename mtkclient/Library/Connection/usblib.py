@@ -129,6 +129,7 @@ class UsbClass(DeviceClass):
         self.EP_OUT = None
         self.is_serial = False
         self.queue = Queue()
+        self.rxleft = bytearray()
         if sys.platform.startswith('freebsd') or sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
             self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.so")
         elif sys.platform.startswith('win32'):
@@ -388,6 +389,7 @@ class UsbClass(DeviceClass):
         return False
 
     def close(self, reset=False):
+        self.rxleft = bytearray()
         if self.connected:
             try:
                 if reset:
@@ -487,6 +489,13 @@ class UsbClass(DeviceClass):
                 extend(q.get(bytestoread))
             if bytestoread <= 0:
                 break
+            if self.rxleft:
+                take = bytes(self.rxleft[:bytestoread])
+                del self.rxleft[:len(take)]
+                extend(take)
+                if endearly:
+                    break
+                continue
             sz = min(buflen, bytestoread)
             try:
                 if fast:
@@ -503,8 +512,16 @@ class UsbClass(DeviceClass):
                     if rlen < sz and maxtimeout == -1:
                         break
                 else:
-                    dt = epr(sz)
+                    # read full packet
+                    # otherwise, a device packet longer than sz would cause an overflow
+                    dt = epr(w_max_packet_size)
                     rlen = len(dt)
+                    if rlen > sz:
+                        if loglevel == logging.DEBUG:
+                            self.debug(f"USB long packet {rlen} vs {sz}: {bytes(dt).hex()}")
+                        self.rxleft.extend(dt[sz:])
+                        dt = dt[:sz]
+                        rlen = sz
                     extend(dt)
                     if endearly and rlen!=0:
                         break
