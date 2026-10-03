@@ -342,7 +342,7 @@ class DALegacy(metaclass=LogBase):
                         sys.exit()
                     if ret == self.Rsp.ACK:
                         self.info(f"Sending dram info ... EMI-Version {hex(self.daconfig.emiver)}")
-                        if self.daconfig.emiver in [0xF, 0x10, 0x11, 0x14, 0x15]:
+                        if self.daconfig.emiver in [0xF, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15]:
                             dramlength = unpack(">I", self.usbread(0x4))[0]  # 0x000000BC
                             self.info(f"RAM-Length: {hex(dramlength)}")
                             self.usbwrite(self.Rsp.ACK)
@@ -368,7 +368,9 @@ class DALegacy(metaclass=LogBase):
                             self.daconfig.emi = self.daconfig.emi[:dramlength]
                             self.usbwrite(pack(">I", dramlength))
                         else:
-                            self.warning("Unknown emi version: %d" % self.daconfig.emiver)
+                            self.error("Unknown emi version: %d" % self.daconfig.emiver)
+                            self.mtk.port.close(reset=True)
+                            return False
                         self.usbwrite(self.daconfig.emi)
                         checksum = unpack(">H", self.usbread(2))[0]  # 0x440C
                         self.info("Checksum: %04X" % checksum)
