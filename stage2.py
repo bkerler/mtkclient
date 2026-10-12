@@ -129,7 +129,20 @@ class Stage2(metaclass=LogBase):
         return False
 
     def connect(self):
-        self.cdc.connected = self.cdc.connect()
+        # NOTE: retry loop - wait for the device to be plugged in (BROM) instead of failing immediately
+        for attempt in range(300):
+            try:
+                self.cdc.connected = self.cdc.connect()
+            except Exception as err:
+                self.warning(f"USB enumeration error: {str(err)} - retrying...")
+                self.cdc.connected = False
+            if self.cdc.connected:
+                break
+            if attempt == 0:
+                self.info("Waiting for device... plug the powered-off phone with USB cable (BROM mode)")
+            elif attempt % 15 == 0:
+                self.info(f"Still waiting for device... ({attempt * 2}s elapsed)")
+            time.sleep(2)
         return self.cdc.connected
 
     def close(self):

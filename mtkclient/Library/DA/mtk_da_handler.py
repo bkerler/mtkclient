@@ -111,7 +111,11 @@ class DaHandler(metaclass=LogBase):
     def connect(self, mtk, directory:str = None):
         if directory is None:
             directory = "."
-        mtk.port.cdc.connected = mtk.port.cdc.connect()
+        # NOTE: single attempt with an exception guard. The actual wait/retry
+        # loop lives in mtk.preloader.init() (port.handshake), which must run
+        # while the port is still unclaimed so it can catch the plug-in
+        # handshake; blocking here would skip it and break fresh sessions.
+        mtk.port.wait_for_device(max_attempts=1, wait=False)
         if mtk.port.cdc.connected is None or not mtk.port.cdc.connected or mtk.serialportname is not None:
             mtk.preloader.init(directory=directory)
             if self.config.internal_flash and self.mtk.config.iot:
