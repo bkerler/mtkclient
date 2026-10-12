@@ -197,6 +197,7 @@ class SerialClass(DeviceClass):
     def flush(self):
         if self.get_device() is not None:
             return self.device.flush()
+        return None
 
     def usbread(self, resplen=None, maxtimeout=0, timeout=0, w_max_packet_size=None):
         # print("Reading {} bytes".format(resplen))
