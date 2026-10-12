@@ -167,7 +167,7 @@ On Apple Silicon Macs, a few extra steps are needed beyond the generic macOS ins
    works on Apple Silicon, but if it fails to start, make sure your venv is created
    from the Homebrew (arm64) Python and not an x86_64 Python under Rosetta:
    ```shell
-   file "$(command -v python3)"   # should report arm64
+   file -L "$(command -v python3)"   # should report arm64
    ```
 
 ---------------------------------------------------------------------------------------------------------------
