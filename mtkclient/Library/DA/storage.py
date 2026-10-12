@@ -316,27 +316,42 @@ class Storage(metaclass=LogBase):
                 else:
                     parttype = "UFS-LUA3"
                     self.flashsize = self.ufs.lu3_size
-            else:
-                if not xml:
-                    parttype = UFSPartitionType.USER
+                # NOTE: match the string first, THEN assign the enum.
+                # The previous code assigned UFSPartitionType.USER here, which
+                # shadowed the still-unmatched string, so every "lu0".."lu3"
+                # comparison below was False and control fell through to the
+                # error branch.  See the report for details.
                 if parttype == "lu0":
-                    if xml:
+                    if not xml:
+                        parttype = UFSPartitionType.USER
+                        self.flashsize = self.ufs.lu0_size
+                    else:
                         parttype = "UFS-LUA0"
-                    self.flashsize = self.ufs.lu0_size
+                        self.flashsize = self.ufs.lu0_size
                 elif parttype == "lu1":  # BOOT1
-                    if xml:
+                    if not xml:
+                        parttype = UFSPartitionType.BOOT1
+                        self.flashsize = self.ufs.lu1_size
+                    else:
                         parttype = "UFS-LUA1"
-                    self.flashsize = self.ufs.lu1_size
+                        self.flashsize = self.ufs.lu1_size
                 elif parttype == "lu2":  # BOOT2
-                    if xml:
+                    if not xml:
+                        parttype = UFSPartitionType.BOOT2
+                        self.flashsize = self.ufs.lu2_size
+                    else:
                         parttype = "UFS-LUA2"
-                    self.flashsize = self.ufs.lu2_size
+                        self.flashsize = self.ufs.lu2_size
                 elif parttype == "lu3":
-                    if xml:
+                    if not xml:
+                        parttype = UFSPartitionType.RPMB
+                        self.flashsize = self.ufs.lu3_size
+                    else:
                         parttype = "UFS-LUA3"
-                    self.flashsize = self.ufs.lu3_size
+                        self.flashsize = self.ufs.lu3_size
                 else:
-                    self.error("Unknown parttype. Known parttypes are \"lu1\",\"lu2\",\"lu3\",\"lu4\"")
+                    self.error("Unknown parttype. Known parttypes are \"user\",\"boot1\","
+                               "\"boot2\",\"rpmb\",\"lu0\",\"lu1\",\"lu2\",\"lu3\"")
                     return []
         elif storage in [DaStorage.MTK_DA_STORAGE_NAND, DaStorage.MTK_DA_STORAGE_NAND_MLC,
                          DaStorage.MTK_DA_STORAGE_NAND_SLC, DaStorage.MTK_DA_STORAGE_NAND_TLC,
