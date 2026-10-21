@@ -112,9 +112,8 @@ class XmlFlashExt(metaclass=LogBase):
                 MOV             X20, X0
                 MOV             W0, #4
                 STR             W0, [SP,#0x28]
-                MOV             X19, #0xF000
                 LDR             X2, [X20]
-                MOVK            X19, #0x6800,LSL#16
+                LDR             X19, =loading_offset
                 MOV             X0, X19
                 BLR             X2
                 LDR             X2, [X20]
@@ -133,8 +132,10 @@ class XmlFlashExt(metaclass=LogBase):
             # encoding, length = ks.asm(content, addr=cmd_set_host)
             # newdata = b"".join(int.to_bytes(val, 1, 'little') for val in encoding)
             # print(newdata.hex())
-            newdata = bytes.fromhex(
-                "fd7bbda9fd030091e1a30091f35301a9f40300aa80008052e02b00b913009ed2820240f91300adf2e00313aa40003fd6820240f9e1b30091600240b9e02f00b9603e40d1733e40d140003fd660023fd6f35341a9fd7bc3a8c0035fd6")
+            loading_offset = self.da2address + 0x2800F000
+            newdata = bytearray.fromhex(
+                "fd7bbda9fd030091e1a30091f35301a9f40300aa80008052e02b00b9820240f9d3010058e00313aa40003fd6820240f9e1b30091600240b9e02f00b9603e40d1733e40d140003fd660023fd6f35341a9fd7bc3a8c0035fd6")
+            newdata.extend(loading_offset.to_bytes(8, 'little'))
             # sys.stdout.flush()
             data[cmd_set_host_offset:cmd_set_host_offset + len(newdata)] = newdata
             return data
@@ -288,19 +289,25 @@ class XmlFlashExt(metaclass=LogBase):
 
                 # EMMC
                 mmc_switch_part_offset = self.archtools.find_function_from_string("mmc_switch_part")
-                mmc_get_card_ptr2 = self.archtools.get_next_bl_from_off(mmc_switch_part_offset)
-                mmc_get_card = self.archtools.get_bl_target(mmc_get_card_ptr2)
+                if mmc_switch_part_offset is None:
+                    mmc_get_card = 0
+                else:
+                    mmc_get_card_ptr2 = self.archtools.get_next_bl_from_off(mmc_switch_part_offset)
+                    mmc_get_card = self.archtools.get_bl_target(mmc_get_card_ptr2)
 
                 mmc_set_part_config = self.archtools.find_function_from_string("%sset_part_config fail %x\n")
-                if mmc_set_part_config is not None:
+                if mmc_set_part_config is None:
+                    mmc_set_part_config = 0
+                else:
                     mmc_set_part_config = mmc_set_part_config + self.da2address
 
                 mmc_rpmb_offs = self.archtools.find_function_from_string("%sreq/1 fail %d\n")
-                logl = self.archtools.get_next_bl_from_off(mmc_rpmb_offs)
-                mmc_rpmb_send_command_ptr2 = self.archtools.get_next_bl_from_off(logl + 0x8)
-                mmc_rpmb_send_command = self.archtools.get_bl_target(mmc_rpmb_send_command_ptr2)
-                if mmc_rpmb_send_command is None:
+                if mmc_rpmb_offs is None:
                     mmc_rpmb_send_command = 0
+                else:
+                    logl = self.archtools.get_next_bl_from_off(mmc_rpmb_offs)
+                    mmc_rpmb_send_command_ptr2 = self.archtools.get_next_bl_from_off(logl + 0x8)
+                    mmc_rpmb_send_command = self.archtools.get_bl_target(mmc_rpmb_send_command_ptr2)
             else:
                 register_ptr = daextdata.find(b"\x11\x11\x11\x11")
                 mmc_get_card_ptr = daextdata.find(b"\x22\x22\x22\x22")
@@ -451,6 +458,17 @@ class XmlFlashExt(metaclass=LogBase):
                 da2patched = self.mem_patch(da2patched, self.archtools.va_to_offset(
                     self.archtools.get_bl_target(dl_pol)), mov_w0_wzr)
                 self.info("Patched hash binding/img_auth/vfy_pol/dl_pol.")
+
+            cust_sec_ptr = self.archtools.find_function_from_string("cust_security_verify_sec_policy")
+            if cust_sec_ptr:
+                da2patched = self.mem_patch(da2patched, cust_sec_ptr, mov_w0_wzr)
+                self.info("Patched Oppo Remote SLA authentification.")
+
+            oppo_allowance_xref = self.archtools.find_string_xref("[oplus] do not get oplus permission\n")
+            if oppo_allowance_xref:
+                addr = self.archtools.resolve_register_value_back(oppo_allowance_xref - 4, 8, 12)
+                da2patched = self.mem_patch(da2patched, self.archtools.va_to_offset(addr), 0x6.to_bytes(4, 'little'))
+                self.info("Patched Oppo Allowance flag.")
 
             da_version = self.archtools.find_function_from_string("[%s] da version check, status(0x%x), CFI(0x%x)\n")
             if da_version:
