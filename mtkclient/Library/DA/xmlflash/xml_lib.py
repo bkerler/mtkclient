@@ -1111,6 +1111,20 @@ class DAXML(metaclass=LogBase):
         int RSA_private_encrypt(int flen, unsigned char *from, unsigned char *to, RSA *rsa, int padding);
                                     0x10,                                                 , 1
         """
+        # OPLUS DA2: the dummy SET-FLASH-POLICY upload succeeds ("accepted")
+        # but the DA reliably stops responding right afterwards - every
+        # follow-up command times out. Observed on RMX3630/MT6789 across many
+        # sessions; the one session that got further (19:43 debug log) had the
+        # SLA dance SKIPPED entirely (check_sla = disabled). Skipping the
+        # policy exchange is safe: the policy verifier is patched to return
+        # success anyway, and the flash commands are gated by the command-
+        # table registrar (unlocked via g_oplus_auth_status=1, not by the
+        # policy exchange).
+        import os as _os
+        if _os.environ.get("OPLUS_SKIP_SLA", "1") == "1" and (
+                b"OPLUS" in self.daconfig.da2 or b"oplus" in self.daconfig.da2):
+            self.info("OPLUS DA2 detected - skipping SLA policy exchange (OPLUS_SKIP_SLA=1)")
+            return False
         data = self.get_sys_property(key="DA.SLA", length=0x200000)
         if data is None:
             return False
