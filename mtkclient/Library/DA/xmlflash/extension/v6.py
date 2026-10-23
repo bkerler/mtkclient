@@ -1192,8 +1192,8 @@ class XmlFlashExt(metaclass=LogBase):
             # raw protocol: WRITE-PARTITION with the real partition NAME
             # (bypasses get_storage()'s "Unknown parttype" mapping)
             self.xflash.send_command(
-                self.cmd.cmd_write_partition(partition=partname,
-                                             mem_length=len(writedata)), noack=True)
+                self.xflash.cmd.cmd_write_partition(partition=partname,
+                                                    mem_length=len(writedata)), noack=True)
             cmd, fileopresult = self.xflash.get_command_result()
             if type(fileopresult) is not FileSysOp:
                 self.error(f"writeflash(WRITE-PARTITION): no FILE-SYS-OPERATION ack, "
