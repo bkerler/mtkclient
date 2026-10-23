@@ -33,6 +33,7 @@ class Partition(metaclass=LogBase):
         return b""
 
     def parse_gpt(self, fh, gpt_settings):
+        self.info("parse_gpt: parsing header...")
         guid_gpt = gpt(rf=fh, filesize=self.mtk.daloader.daconfig.storage.flashsize,
                        num_part_entries=gpt_settings.gpt_num_part_entries,
                        part_entry_size=gpt_settings.gpt_part_entry_size,
@@ -62,7 +63,9 @@ class Partition(metaclass=LogBase):
                        part_entry_start_lba=gpt_settings.gpt_part_entry_start_lba,
                        )
         guid_gpt.sectorsize = self.config.pagesize
+        self.info("parse_gpt: parsing entry array...")
         guid_gpt.parse()
+        self.info("parse_gpt: done")
         return guid_gpt
 
     def get_pmt(self, backup: bool = False, parttype: str = "user") -> tuple:
@@ -107,8 +110,10 @@ class Partition(metaclass=LogBase):
         return b"", None
 
     def parse_mbr(self, fh, gpt_settings, offset:int=0):
+        self.info(f"parse_mbr: offset={hex(offset)} reading MBR...")
         fh.seek(offset)
         data = fh.read(2 * self.config.pagesize)
+        self.info("parse_mbr: MBR read done")
         if data[0x1FE:0x200] == b"\x55\xAA":
             fh.pagesize = self.config.pagesize
             fh.seek(offset)
