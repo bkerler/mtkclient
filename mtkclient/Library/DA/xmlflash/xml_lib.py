@@ -695,9 +695,18 @@ class DAXML(metaclass=LogBase):
             patches.append(("cust_security_verify_sec_policy", at.offset_to_va(off), ret_r0))
 
         # 2. oplus_security_verify_sec_policy: the OPLUS-side verifier (prints
-        #    "Server is not authenticated. Locked." on failure). Return 0 (= ok)
-        #    and set the global auth status g_oplus_auth_status to 1
-        #    ("Download authorization Ok in oplus"):
+        #    "Server is not authenticated. Locked." on failure). CRITICAL: the
+        #    command registrar (0x40001a6c) keys the command table off
+        #    g_oplus_auth_status AFTER the policy check:
+        #      status 3 = LOCKED  -> registers only the basic table (GET-HW-INFO,
+        #                            EFUSE, READ-REGISTER) and RETURNS -
+        #                            READ-FLASH etc answer ERR!UNSUPPORTED
+        #      status 4           -> read-back (read-only) table
+        #      status 0/1/2       -> FULL table (READ+WRITE flash/partitions)
+        #    With a bare "return 0" the status stays at its boot value (3), so
+        #    the session is registered LOCKED. The stub below returns 0 AND
+        #    stores 1 ("Download authorization Ok in oplus") into the status
+        #    global, unlocking the full command table:
         #       MOV R0, #1
         #       LDR R1, [PC, #8]   ; literal below
         #       STR R0, [R1]
@@ -707,9 +716,10 @@ class DAXML(metaclass=LogBase):
         off = at.find_function_from_string("[OPLUS] verify signature of device info")
         if off is not None:
             # Patch level switch (env OPLUS_PATCH_LEVEL):
-            #   3 = full: RET0-stub + g_oplus_auth_status=1 + DA.SLA DISABLE (default)
-            #   2 = RET0-stub + DA.SLA DISABLE (no status write)
-            #   1 = RET0-stub only
+            #   3 = full: status-unlock stub + DA.SLA DISABLE (default)
+            #   2 = status-unlock stub only
+            #   1 = bare RET0 (status stays 3 -> LOCKED, basic cmds only)
+            #   4 = read-only: stub writing 4 ("read back mode") + DA.SLA DISABLE
             #   0 = DA.SLA DISABLE only
             import os as _os
             try:
@@ -717,9 +727,48 @@ class DAXML(metaclass=LogBase):
             except ValueError:
                 level = 3
             self.info(f"OPLUS patch level: {level}")
-            if level in (1, 2, 3):
-                patches.append(("oplus_security_verify_sec_policy -> MOV R0,#0; BX LR",
-                                at.offset_to_va(off), ret_r0))
+            if level in (1, 2, 3, 4):
+                g_status = 0
+                xref = at.find_string_xref("[OPLUS]%s start, g_oplus_auth_status=%d buf_sz=%x")
+                if xref is not None:
+                    # The compiler interleaves the movw/movt halves of two
+                    # adjacent literals (the status pointer and the log-format
+                    # string pointer); match pairs by destination register.
+                    import struct as _struct
+                    found = False
+                    for k in range(xref - 0x40, xref + 0x10, 4):
+                        w = _struct.unpack("<I", da2[k:k + 4])[0]
+                        if (w & 0x0FF00000) != 0x03000000:
+                            continue
+                        rd = (w >> 12) & 0xF
+                        for step in (4, 8):
+                            n = _struct.unpack("<I", da2[k + step:k + step + 4])[0]
+                            if (n & 0x0FF00000) != 0x03400000 or (n >> 12) & 0xF != rd:
+                                continue
+                            addr = ((((n >> 4) & 0xF000) | (n & 0xFFF)) << 16) + \
+                                   ((w >> 4) & 0xF000) | (w & 0xFFF)
+                            if addr > 0x40040000 and (addr & 3) == 0:
+                                g_status = addr
+                                found = True
+                                break
+                        if found:
+                            break
+                if level == 1:
+                    patches.append(("oplus_security_verify_sec_policy -> MOV R0,#0; BX LR",
+                                    at.offset_to_va(off), ret_r0))
+                else:
+                    status_val = 4 if level == 4 else 1
+                    stub = bytearray(b"\x01\x00\xA0\xE3"      # MOV R0, #1 (patched below)
+                                     b"\x08\x10\x9F\xE5"      # LDR R1, [PC, #8]
+                                     b"\x00\x00\x81\xE5"      # STR R0, [R1]
+                                     b"\x00\x00\xA0\xE3"      # MOV R0, #0
+                                     b"\x1E\xFF\x2F\xE1"      # BX LR
+                                     b"\x00\x00\x00\x00")     # literal
+                    stub[0:4] = (0xE3A00000 | status_val).to_bytes(4, "little")
+                    if g_status:
+                        stub[20:24] = g_status.to_bytes(4, "little")
+                    patches.append((f"oplus_security_verify_sec_policy -> RET0 + status={status_val}",
+                                    at.offset_to_va(off), bytes(stub)))
             else:
                 level = 0
         else:
