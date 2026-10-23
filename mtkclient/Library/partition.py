@@ -151,11 +151,13 @@ class Partition(metaclass=LogBase):
         return data, None
 
     def get_gpt(self, gpt_settings, parttype: str = "user") -> tuple:
+        self.info("get_gpt: reading partition table header...")
         fh = MTKFileHandler(mtk=self.mtk, parttype=parttype)
         fh.pagesize = self.config.pagesize
         fh.filesize = self.mtk.daloader.daconfig.storage.flashsize
         fh.seek(0)
         data = fh.read(2 * self.config.pagesize)
+        self.info(f"get_gpt: header read done ({0 if not data else len(data)}B)")
         if not data:
             return None, None
         if data[:4] == b"BPI\x00":
