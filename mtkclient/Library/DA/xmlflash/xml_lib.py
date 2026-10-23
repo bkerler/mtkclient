@@ -681,55 +681,31 @@ class DAXML(metaclass=LogBase):
         #       DCD  g_oplus_auth_status
         off = at.find_function_from_string("[OPLUS] verify signature of device info")
         if off is not None:
-            g_status = 0
-            xref = at.find_string_xref("[OPLUS]%s start, g_oplus_auth_status=%d buf_sz=%x")
-            if xref is not None:
-                # The compiler interleaves the movw/movt halves of two adjacent
-                # literals (g_oplus_auth_status pointer and the log-format
-                # string pointer):
-                #   movw r0,#0x455c ; movw r1,#0x5268
-                #   movt r0,#0x4005 ; movt r1,#0x4004
-                # So scan the window for movw/movt pairs sharing the SAME
-                # destination register (gap up to 2 instructions) and pick the
-                # one pointing into the globals/data page (log strings live in
-                # 0x4004xxxx on this build).
-                import struct as _struct
-                found = False
-                for k in range(xref - 0x40, xref + 0x10, 4):
-                    w = _struct.unpack("<I", da2[k:k + 4])[0]
-                    if (w & 0x0FF00000) != 0x03000000:
-                        continue
-                    rd = (w >> 12) & 0xF
-                    for step in (4, 8):
-                        n = _struct.unpack("<I", da2[k + step:k + step + 4])[0]
-                        if (n & 0x0FF00000) != 0x03400000 or (n >> 12) & 0xF != rd:
-                            continue
-                        addr = ((((n >> 4) & 0xF000) | (n & 0xFFF)) << 16) + \
-                               ((w >> 4) & 0xF000) | (w & 0xFFF)
-                        if addr > 0x40040000 and (addr & 3) == 0:
-                            g_status = addr
-                            found = True
-                            break
-                    if found:
-                        break
-            stub = bytearray(b"\x01\x00\xA0\xE3"  # MOV R0, #1
-                             b"\x08\x10\x9F\xE5"  # LDR R1, [PC, #8]
-                             b"\x00\x00\x81\xE5"  # STR R0, [R1]
-                             b"\x00\x00\xA0\xE3"  # MOV R0, #0
-                             b"\x1E\xFF\x2F\xE1"  # BX LR
-                             b"\x00\x00\x00\x00")  # literal
-            if g_status:
-                stub[20:24] = g_status.to_bytes(4, "little")
-            patches.append(("oplus_security_verify_sec_policy(+auth_status=1)",
-                            at.offset_to_va(off), bytes(stub)))
-
-        # 3. DA.SLA property value: "DA.SLA\0ENABLED" -> "DA.SLA\0DISABLE".
-        #    check_sla() asks the DA for this property; with DISABLED the host
-        #    skips the SLA signature dance that the OPLUS DA2 always rejects.
-        #    (heapbait's own patch_da() writes this patch to the file offset
-        #    instead of the runtime VA - a no-op - so we do it correctly here.)
+            # Patch level switch (env OPLUS_PATCH_LEVEL):
+            #   3 = full: RET0-stub + g_oplus_auth_status=1 + DA.SLA DISABLE (default)
+            #   2 = RET0-stub + DA.SLA DISABLE (no status write)
+            #   1 = RET0-stub only
+            #   0 = DA.SLA DISABLE only
+            import os as _os
+            try:
+                level = int(_os.environ.get("OPLUS_PATCH_LEVEL", "3"))
+            except ValueError:
+                level = 3
+            self.info(f"OPLUS patch level: {level}")
+            if level in (1, 2, 3):
+                patches.append(("oplus_security_verify_sec_policy -> MOV R0,#0; BX LR",
+                                at.offset_to_va(off), ret_r0))
+            else:
+                level = 0
+        else:
+            level = 0
+        # DA.SLA property value: "DA.SLA\0ENABLED" -> "DA.SLA\0DISABLE".
+        # check_sla() asks the DA for this property; with DISABLED the host
+        # skips the SLA signature dance that the OPLUS DA2 always rejects.
+        # (heapbait's own patch_da() writes this patch to the file offset
+        # instead of the runtime VA - a no-op - so we do it correctly here.)
         idx = da2.find(b"DA.SLA\x00ENABLED")
-        if idx != -1:
+        if idx != -1 and level in (0, 2, 3):
             patches.append(("DA.SLA ENABLED->DISABLE",
                             da2address + idx + len(b"DA.SLA\x00"), b"DISABLE"))
 
