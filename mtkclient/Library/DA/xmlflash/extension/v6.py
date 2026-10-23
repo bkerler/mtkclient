@@ -1213,6 +1213,21 @@ class XmlFlashExt(metaclass=LogBase):
                 writedata = bytes(writedata)
             ok, msg = self.seccfg_write_partition(partition, writedata)
             if ok:
+                # Immediately re-read in the SAME session: discriminates
+                # "write never committed" (reads zeros right away) vs
+                # "zeroed at the next boot" (reads valid NOW, zeros next boot)
+                self.info("Write OK - re-reading seccfg in the SAME session...")
+                import time as _t
+                _t.sleep(1.0)
+                check = self.xflash.readflash(
+                    addr=partition.sector * guid_gpt.sectorsize,
+                    length=0x1000, filename="", parttype="user", display=False)
+                if check and check[:4] == b"\x4D\x4D\x4D\x4D":
+                    magic, ver, size, lock, dmv, sboot, endf = unpack("<IIIIIII", check[:28])
+                    self.info(f"Same-session readback: lock_state={lock}, "
+                              f"dm_verity={hex(dmv)}, sboot={hex(sboot)} - WRITE COMMITTED")
+                else:
+                    self.error("Same-session readback: EMPTY/ZERO - write did NOT commit!")
                 return True, "Successfully wrote seccfg."
             return False, msg
         if self.xflash.writeflash(addr=addr,
