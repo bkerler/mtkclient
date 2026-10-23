@@ -978,6 +978,19 @@ class DAXML(metaclass=LogBase):
                             0x4002f804, ret_r0))
             patches.append(("entity-compare deny gate 0x4002fcf4 BEQ -> B",
                             0x4002fcf4, b"\x08\x00\x00\xea"))
+            # The SEC seccfg service REGENERATES seccfg with ITS OWN state
+            # value on every write (observed: any full-partition write comes
+            # back as lock_state=2/MP_DEFAULT regardless of the payload).
+            # The state writer: sec service stores 1 or 2 into the state
+            # global 0x4006E9F0:
+            #   0x40034ffc: MOV r1,#1 (LOCKED path)
+            #   0x40035014: MOV r1,#2 (MP_DEFAULT path)
+            # Patch BOTH to write 3 (UNLOCK) so the regenerated seccfg
+            # carries lock_state=3.
+            patches.append(("SEC seccfg state writer 0x40034ffc MOV r1,#1 -> #3",
+                            0x40035000, b"\x03\x10\xa0\xe3"))
+            patches.append(("SEC seccfg state writer 0x40035014 MOV r1,#2 -> #3",
+                            0x40035014, b"\x03\x10\xa0\xe3"))
 
         if not patches:
             self.warning("No OPLUS runtime patch targets found in DA2")
