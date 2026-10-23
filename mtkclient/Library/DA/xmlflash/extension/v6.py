@@ -1221,8 +1221,17 @@ class XmlFlashExt(metaclass=LogBase):
                                                 mem_length=len(writedata)), noack=True)
         for _op in range(4):
             cmd, fileopresult = self.xflash.get_command_result()
+            if type(fileopresult) is DwnFile:
+                # No EXISTS/FILE-SIZE round-trip: the DA went straight to
+                # CMD:DOWNLOAD-FILE (size already known from the WRITE-PARTITION
+                # XML). Upload the data now.
+                self.info("writeflash(WRITE-PARTITION): DwnFile - uploading data")
+                if not self.xflash.upload(fileopresult, writedata, raw=True):
+                    self.error("Error on writing seccfg config to flash (upload).")
+                    return False, "Error on writing seccfg config to flash."
+                return True, "Successfully wrote seccfg."
             if type(fileopresult) is not FileSysOp:
-                break  # e.g. CMD:END error or DwnFile
+                break  # e.g. CMD:END error
             self.info(f"writeflash(WRITE-PARTITION): FileSysOp key={fileopresult.key!r}")
             if fileopresult.key == "EXISTS":
                 self.xflash.ack_value(0)  # "OK@0x0\0" - sig file does not exist
