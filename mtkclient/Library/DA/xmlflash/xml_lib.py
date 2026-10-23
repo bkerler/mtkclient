@@ -196,37 +196,49 @@ class DAXML(metaclass=LogBase):
         return res
 
     def send_command(self, xmldata, noack: bool = False):
-        if self.xsend(data=xmldata):
-            result = self.get_response()
-            if result == "OK":
-                if noack:
-                    return True
-                cmd, result = self.get_command_result()
-                if cmd == "CMD:END":
-                    if result!="OK":
-                        self.error(result)
-                        return False
-                    self.ack()
-                    if result == '2nd DA address is invalid. reset.\r\n':
-                        self.error(result)
-                        exit(1)
-                    scmd, sresult = self.get_command_result()
-                    if scmd == "CMD:START":
-                        if result == "OK":
-                            return True
-                        else:
+        # The OPLUS DA2 (RMX3630/MT6789) intermittently loses the first USB
+        # bulk-IN transfer after SLA acceptance (EIO -> xread empty). A single
+        # retry of the whole command recovers - observed on device (the CUSTOM
+        # command right after the failed GET-HW-INFO worked). Retry generic
+        # XML commands once on a dead read.
+        for _attempt in range(2):
+            if self.xsend(data=xmldata):
+                result = self.get_response()
+                if result == "OK":
+                    if noack:
+                        return True
+                    cmd, result = self.get_command_result()
+                    if cmd == "CMD:END":
+                        if result!="OK":
                             self.error(result)
                             return False
-                else:
+                        self.ack()
+                        if result == '2nd DA address is invalid. reset.\r\n':
+                            self.error(result)
+                            exit(1)
+                        scmd, sresult = self.get_command_result()
+                        if scmd == "CMD:START":
+                            if result == "OK":
+                                return True
+                            else:
+                                self.error(result)
+                                return False
+                    else:
+                        return result
+                elif result == "ERR!UNSUPPORTED":
+                    scmd, sresult = self.get_command_result()
+                    self.ack()
+                    tcmd, tresult = self.get_command_result()
+                    if tcmd == "CMD:START":
+                        return False
+                elif "ERR!" in result:
                     return result
-            elif result == "ERR!UNSUPPORTED":
-                scmd, sresult = self.get_command_result()
-                self.ack()
-                tcmd, tresult = self.get_command_result()
-                if tcmd == "CMD:START":
-                    return False
-            elif "ERR!" in result:
-                return result
+                else:
+                    # empty/garbled response (EIO class) - retry the command
+                    self.debug(f"send_command: empty response, retry {_attempt + 1}")
+                    continue
+            else:
+                return False
         return False
 
     def get_response(self, raw: bool = False):
