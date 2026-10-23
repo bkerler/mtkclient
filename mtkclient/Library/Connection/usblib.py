@@ -601,18 +601,12 @@ class UsbClass(DeviceClass):
                     sys.exit(1)
                 else:
                     self.info(repr(e))
-                    # EIO (errno 5) on bulk IN usually means the DEVICE halted
-                    # the endpoint (babble / stalled transfer). Without
-                    # CLEAR_FEATURE(HALT) every subsequent read keeps failing,
-                    # cascading into a dead session. Clear the halt and retry
-                    # the transfer once.
-                    if "Input/Output Error" in error:
-                        try:
-                            self.EP_IN.clear_halt()
-                            self.EP_OUT.clear_halt()
-                            self.debug("Cleared USB halt on EP_IN/EP_OUT after EIO")
-                        except Exception as e2:
-                            self.debug(f"clear_halt failed: {e2!r}")
+                    # NOTE: no clear_halt here. Bulk endpoints have DATA TOGGLE
+                    # synchronization; clearing the halt on the host side can
+                    # desynchronize the toggle vs the device, after which the
+                    # device NAKs forever (observed: one EIO, then permanent
+                    # silence). Return empty and let the protocol layer retry
+                    # the whole command instead.
                     return b""
 
         if loglevel == logging.DEBUG:
