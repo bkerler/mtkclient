@@ -165,6 +165,39 @@ DA_BR.bin DA2 except the trailing 254-byte signature trailer):
   Locked." after a dummy SLA upload) - the runtime patches target exactly
   that gate and have NOT yet been verified on the device.
 
+## Host-side gotchas found on the way (keep these in mind)
+
+* **`hwparam.json` / `.state` in the working directory**: after one successful
+  session mtkclient writes a `.state` cache (flashmode, patched, hwcode,
+  target_config, flashtype). On the next run, `DaHandler.connect()` sees
+  `.state`, calls `daloader.reinit()` and **skips the entire preloader
+  handshake / DA upload** - the tool then sends GET-HW-INFO to a fresh
+  PRELOADER (not a DA2), which fails with EIO ('Cannot Reinit'). Delete
+  `.state` + `hwparam.json` before every fresh attempt.
+* **READY spam**: the OPLUS preloader CDC interface keeps emitting ASCII
+  "READY" packets on bulk-IN even while the DA2 runs; every stray packet
+  desyncs the XML protocol (random post-SLA EIO). xread now flushes stale
+  data at command boundaries (OPLUS_FLUSH=1, default on).
+* **USB speed change**: `change_usb_speed()` re-enumerates USB and is flaky
+  on this path (OPLUS_NO_USB_SPEED=1 skips it, default on in our loop).
+
+## OPLUS command-table gate (decoded from 0x40001a6c)
+
+The registrar keys the command table on `g_oplus_auth_status` AFTER the
+policy check:
+
+| status | table |
+|--------|-------|
+| 3 (boot default = LOCKED) | basic only (EFUSE r/w, GET-HW-INFO, READ-REGISTER), flash cmds answer `ERR!UNSUPPORTED` |
+| 4 | read-back (read-only flash) table |
+| 0/1/2 | FULL table (READ+WRITE flash/partitions) |
+
+A bare `return 0` patch of `oplus_security_verify_sec_policy` leaves the
+status at 3 -> the session stays locked (this was exactly the level-1
+behavior: GET-HW-INFO OK, READ-FLASH unsupported). The runtime stub must
+ALSO store 1 into `g_oplus_auth_status` (default patch level 3). Level 4
+gives a read-only session if ever needed.
+
 ## Next steps
 
 * Run the runtime-patch flow (unpatched DA2 → heapbait →
