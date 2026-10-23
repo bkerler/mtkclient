@@ -601,12 +601,21 @@ class UsbClass(DeviceClass):
                     sys.exit(1)
                 else:
                     self.info(repr(e))
-                    # NOTE: no clear_halt here. Bulk endpoints have DATA TOGGLE
-                    # synchronization; clearing the halt on the host side can
-                    # desynchronize the toggle vs the device, after which the
-                    # device NAKs forever (observed: one EIO, then permanent
-                    # silence). Return empty and let the protocol layer retry
-                    # the whole command instead.
+                    # NOTE: no clear_halt here by default. Bulk endpoints have
+                    # DATA TOGGLE synchronization; clearing the halt on the
+                    # host side can desynchronize the toggle vs the device,
+                    # after which the device NAKs forever. HOWEVER: without a
+                    # clear a REAL stall also blocks forever (observed: post-
+                    # SLA EIO cascade -> device gone; in the log1-era code,
+                    # which DID clear the halt, the same EIO recovered). Test
+                    # the halt-clearing path with OPLUS_CLEAR_HALT=1.
+                    import os as _os
+                    if _os.environ.get("OPLUS_CLEAR_HALT", "0") == "1":
+                        try:
+                            self.EP_IN.clear_halt()
+                            self.info("clear_halt after EIO (OPLUS_CLEAR_HALT=1)")
+                        except Exception as e2:
+                            self.debug(f"clear_halt failed: {e2!r}")
                     return b""
 
         if loglevel == logging.DEBUG:

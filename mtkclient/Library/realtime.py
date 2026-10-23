@@ -69,12 +69,15 @@ class MTKFileHandler(RealTimeHandler):
         self.mtk.port.cdc.disconnect()
 
     def seek(self, pos: int) -> bool:
-        if pos <= self.filesize:
-            self.mtk_pos = self.preoffset
-            self.curoffset = pos
-            self.curblock = pos // self.mtk.config.pagesize
-            return True
-        return False
+        # filesize can be None when the GPT is read before any get_hw_info /
+        # storage setup ran (e.g. OPLUS_SKIP_HWINFO=1 skips reinit) - treat
+        # as "unknown size, allow the seek" instead of crashing.
+        if self.filesize is not None and pos > self.filesize:
+            return False
+        self.mtk_pos = self.preoffset
+        self.curoffset = pos
+        self.curblock = pos // self.mtk.config.pagesize
+        return True
 
     def read_rpmb(self):
         return self.mtk.daloader.read_rpmb("", 0, 0x40000)

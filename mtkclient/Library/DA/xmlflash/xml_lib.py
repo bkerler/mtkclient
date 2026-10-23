@@ -126,6 +126,9 @@ class DAXML(metaclass=LogBase):
             self.debug(f"flush: discarded {len(peek)}B stale: {bytes(peek)[:32]!r}")
 
     def xread(self) -> Tuple[int,int]:
+        import os as _os
+        if _os.environ.get("OPLUS_STREAM_READER", "0") == "1":
+            return self.xread_stream()
         # NOTE: no proactive flush here. A proactive read right after the DA1
         # jump raced with the DA boot and killed the session (EIO on every
         # attempt). Stale OPLUS "READY" packets are instead handled
@@ -164,6 +167,86 @@ class DAXML(metaclass=LogBase):
                     pass
             elif datatype == DataType.DT_PROTOCOL_FLOW:
                 return datatype, length
+
+    def xread_stream(self) -> Tuple[int,int]:
+        """
+        E4: robust streaming reader. Instead of fixed-size reads (which break
+        when the OPLUS preloader CDC background buffer injects "READY" spam
+        into the stream: "xread: Wrong length (5): 52 45 41 44 59"), scan the
+        byte stream for the 0xFEEEEEEF magic, discard anything before it, and
+        parse the header from the synced position. Any bytes left over after
+        the header/body are pushed back into cdc.rxleft so the caller's plain
+        usbread() picks them up first, in order.
+        """
+        magic = b"\xef\xee\xee\xef"
+        buf = getattr(self, "_xbuf", None)
+        if buf is None:
+            buf = self._xbuf = bytearray()
+
+        def fill() -> int:
+            chunk = self.usbread()
+            if chunk:
+                buf.extend(chunk)
+                return len(chunk)
+            return 0
+
+        while True:
+            # 1. resync: discard garbage until the buffer starts with the magic
+            while bytes(buf[:4]) != magic:
+                idx = buf.find(magic)
+                if idx > 0:
+                    del buf[:idx]
+                    break
+                if idx == 0:
+                    break
+                # magic not present: keep the last 3 bytes (a magic may
+                # straddle the chunk boundary), drop the rest
+                del buf[:-3]
+                if fill() == 0:
+                    self.error("xread_stream: no data while resyncing")
+                    return -1, -1
+            # 2. header: 12 bytes = magic(4) + datatype(4) + length(4)
+            while len(buf) < 12:
+                if fill() == 0:
+                    self.error("xread_stream: short header")
+                    return -1, -1
+            datatype = int.from_bytes(buf[4:8], 'little')
+            length = int.from_bytes(buf[8:0xC], 'little')
+            if datatype == DataType.DT_MESSAGE:
+                # 16-byte header incl. priority, then length-4 bytes of text
+                while len(buf) < 16:
+                    if fill() == 0:
+                        self.error("xread_stream: short message header")
+                        return -1, -1
+                priority = int.from_bytes(buf[0xC:0x10], 'little')
+                need = length - 4
+                del buf[:16]
+                while len(buf) < need:
+                    if fill() == 0:
+                        self.error("xread_stream: short message body")
+                        return -1, -1
+                data = bytes(buf[:need])
+                del buf[:need]
+                try:
+                    msg = data.rstrip(b"\x00").decode('utf-8', errors='replace')
+                    self.config.uartlog.append(msg)
+                    self.info(f"[DA] {priority} {msg}")
+                except Exception:
+                    pass
+                continue  # keep reading until the real protocol packet
+            elif datatype == DataType.DT_PROTOCOL_FLOW:
+                del buf[:12]
+                # hand any buffered surplus back to the USB layer so the
+                # caller's direct usbread(length) sees it first
+                if buf:
+                    self.mtk.port.cdc.rxleft[:0] = buf
+                    buf.clear()
+                return datatype, length
+            else:
+                self.error(f"xread_stream: unknown datatype {hex(datatype)}, hdr: "
+                           f"{bytes(buf[:16]).hex(' ')} - resyncing")
+                del buf[:4]  # drop the bogus magic, resync from scratch
+                continue
 
     def xsend(self, data, datatype=DataType.DT_PROTOCOL_FLOW, is64bit: bool = False):
         if isinstance(data, int):
@@ -222,7 +305,11 @@ class DAXML(metaclass=LogBase):
         # retry of the whole command recovers - observed on device (the CUSTOM
         # command right after the failed GET-HW-INFO worked). Retry generic
         # XML commands once on a dead read.
-        for _attempt in range(2):
+        # OPLUS_LEGACY_HOST=1: log2-era single-shot behavior (no retry loop,
+        # return False on an empty response immediately).
+        import os as _os
+        _attempts = 1 if _os.environ.get("OPLUS_LEGACY_HOST", "0") == "1" else 2
+        for _attempt in range(_attempts):
             if self.xsend(data=xmldata):
                 result = self.get_response()
                 if result == "OK":
@@ -416,6 +503,13 @@ class DAXML(metaclass=LogBase):
     def get_command_result(self):
         data = self.get_response()
         if not data:
+            import os as _os
+            if _os.environ.get("OPLUS_LEGACY_HOST", "0") == "1":
+                # log2-era behavior: return the empty result to the caller
+                # with NO flush/retry activity in between (the discard-all
+                # flush loop here post-dates the log2 success and every
+                # session since has died at this exact point).
+                return "", ""
             # EIO class: the OPLUS preloader/DA occasionally drops a transfer.
             # Give the device a moment, then DISCARD ALL pending data: any
             # bytes still in flight belong to the aborted response. Replaying
@@ -749,7 +843,7 @@ class DAXML(metaclass=LogBase):
             except ValueError:
                 level = 3
             self.info(f"OPLUS patch level: {level}")
-            if level in (1, 2, 3, 4):
+            if level in (1, 2, 3, 4, 5):
                 g_status = 0
                 xref = at.find_string_xref("[OPLUS]%s start, g_oplus_auth_status=%d buf_sz=%x")
                 if xref is not None:
@@ -778,6 +872,13 @@ class DAXML(metaclass=LogBase):
                 if level == 1:
                     patches.append(("oplus_security_verify_sec_policy -> MOV R0,#0; BX LR",
                                     at.offset_to_va(off), ret_r0))
+                elif level == 5:
+                    # E1: bare RET0 only (Level-1 stub, no shellcode, no STR,
+                    # no Thumb/ARM or literal-address risk). g_oplus_auth_status
+                    # is written DIRECTLY via patch_mem after all patches are
+                    # applied - value from OPLUS_STATUS (default 1 = FULL).
+                    patches.append(("oplus_security_verify_sec_policy -> MOV R0,#0; BX LR (E1: status via direct patch_mem)",
+                                    at.offset_to_va(off), ret_r0))
                 else:
                     status_val = 4 if level == 4 else 1
                     stub = bytearray(b"\x01\x00\xA0\xE3"      # MOV R0, #1 (patched below)
@@ -801,7 +902,7 @@ class DAXML(metaclass=LogBase):
         # (heapbait's own patch_da() writes this patch to the file offset
         # instead of the runtime VA - a no-op - so we do it correctly here.)
         idx = da2.find(b"DA.SLA\x00ENABLED")
-        if idx != -1 and level in (0, 2, 3):
+        if idx != -1 and level in (0, 2, 3, 5):
             patches.append(("DA.SLA ENABLED->DISABLE",
                             da2address + idx + len(b"DA.SLA\x00"), b"DISABLE"))
 
@@ -827,7 +928,14 @@ class DAXML(metaclass=LogBase):
         if sbc is None:
             # fallback: fixed offset observed on this build
             sbc = 0x40039d00
-        patches.append((f"get_hw_sbc({hex(sbc)}) -> MOV R0,#0; BX LR", sbc, ret_r0))
+        import os as _os
+        if _os.environ.get("OPLUS_SBC_PATCH", "0") == "1":
+            patches.append((f"get_hw_sbc({hex(sbc)}) -> MOV R0,#0; BX LR", sbc, ret_r0))
+        else:
+            # Default OFF (doc.txt plan step 1): the 19:43 session may have
+            # survived BECAUSE of this patch, or despite it - bisect it.
+            # Re-enable with OPLUS_SBC_PATCH=1.
+            self.info(f"get_hw_sbc patch skipped (set OPLUS_SBC_PATCH=1 to enable; target {hex(sbc)})")
 
         if not patches:
             self.warning("No OPLUS runtime patch targets found in DA2")
@@ -841,6 +949,53 @@ class DAXML(metaclass=LogBase):
                     self.error(f"Failed to patch {name} @ {hex(addr)}")
             except Exception as e:
                 self.error(f"Error patching {name}: {e!r}")
+
+        # ---- E1 follow-up: direct g_oplus_auth_status write ---------------
+        # No shellcode: write the status global itself. The heuristic resolver
+        # above (movw/movt pair search) may fail; 0x4005455c is the address
+        # decoded statically on this build (rmx3630_session_2026-10-23.md).
+        if level == 5:
+            import struct as _struct
+            try:
+                status_val = int(_os.environ.get("OPLUS_STATUS", "1"))
+            except ValueError:
+                status_val = 1
+            # smth.txt: write the STATIC address 0x4005455c exactly - a wrong
+            # heuristic hit would be a Data Abort in itself. Keep the
+            # heuristic result only for the log; override with
+            # OPLUS_STATUS_ADDR if a future build differs.
+            if g_status and g_status != 0x4005455c:
+                self.info(f"E1: heuristic status addr {hex(g_status)} != static 0x4005455c, using static")
+            if _os.environ.get("OPLUS_STATUS_ADDR"):
+                g_status = int(_os.environ["OPLUS_STATUS_ADDR"], 16)
+            else:
+                g_status = 0x4005455c
+            self.info(f"E1: DIRECT WRITE: g_oplus_auth_status ({hex(g_status)}) set to {status_val} "
+                      f"({'FULL' if status_val == 1 else status_val})")
+            try:
+                if self.heapbait.patch_mem(g_status, _struct.pack("<I", status_val)):
+                    self.info("E1: DIRECT WRITE: g_oplus_auth_status OK")
+                else:
+                    self.error("E1: DIRECT WRITE: Failed to set g_oplus_auth_status")
+            except Exception as e:
+                self.error(f"E1: DIRECT WRITE error: {e!r}")
+
+            # ---- E3: force the command-table registrar to re-run ----------
+            # If the registrar (0x40001a6c) only builds the command table once
+            # at DA2 start (status still 3/LOCKED then), writing the status
+            # alone changes nothing - re-invoke it explicitly. Override the
+            # address with OPLUS_REGISTRAR_ADDR if it differs on another build.
+            if _os.environ.get("OPLUS_CALL_REGISTRAR", "0") == "1":
+                try:
+                    registrar = int(_os.environ.get("OPLUS_REGISTRAR_ADDR", "0x40001a6c"), 16)
+                except ValueError:
+                    registrar = 0x40001a6c
+                self.info(f"E3: calling command registrar @ {hex(registrar)}")
+                try:
+                    resp = self.heapbait.call_func(registrar)
+                    self.info(f"E3: call_func -> {resp!r}")
+                except Exception as e:
+                    self.error(f"E3: call_func failed: {e!r}")
 
     def upload_da(self):
         self.daext = False
@@ -920,30 +1075,54 @@ class DAXML(metaclass=LogBase):
                                     # log packet right after SLA acceptance; drain
                                     # and log it so the protocol stays in sync
                                     # (USBError(5) on the next command otherwise).
-                                    try:
-                                        pend = self.usbread(0x200, maxtimeout=2)
-                                        if pend:
-                                            self.info(f"Post-SLA pending data ({len(pend)}B): {bytes(pend).hex(' ')}")
-                                            self.info(f"Post-SLA pending text: {bytes(pend)!r}")
-                                    except Exception as e:
-                                        self.debug(f"Post-SLA drain: nothing pending ({e!r})")
+                                    # NOTE: in the log1 sessions (which RECOVERED
+                                    # from the post-SLA EIO) there was NO drain -
+                                    # the first post-SLA transfer was get_hw_info's
+                                    # own xsend/read. If the drain itself trips the
+                                    # EIO state, set OPLUS_NO_DRAIN=1 to skip it.
+                                    import os as _os
+                                    if _os.environ.get("OPLUS_NO_DRAIN", "0") == "1":
+                                        self.debug("Post-SLA drain skipped (OPLUS_NO_DRAIN=1)")
+                                    else:
+                                        try:
+                                            pend = self.usbread(0x200, maxtimeout=2)
+                                            if pend:
+                                                self.info(f"Post-SLA pending data ({len(pend)}B): {bytes(pend).hex(' ')}")
+                                                self.info(f"Post-SLA pending text: {bytes(pend)!r}")
+                                        except Exception as e:
+                                            self.debug(f"Post-SLA drain: nothing pending ({e!r})")
                                     # GET-HW-INFO on the OPLUS DA2 intermittently
-                                    # loses its response (EIO). The failure is
-                                    # flaky USB, not a dead DA (observed: one
-                                    # run lost the response once and fully
-                                    # recovered). Be patient: 5 attempts, 500ms
-                                    # apart; usblib clears the endpoint halt
-                                    # after each EIO.
-                                    import time as _time
-                                    hw = False
-                                    for _attempt in range(5):
-                                        _time.sleep(0.5)
-                                        hw = self.get_hw_info()
-                                        if hw:
-                                            break
-                                        self.info(f"get_hw_info failed (attempt {_attempt + 1}) - retrying")
-                                    if not hw:
-                                        self.error("get_hw_info failed 5 times - storage type unknown")
+                                    # loses its response (EIO). In the log1@2
+                                    # session the ONE-OFF EIO was absorbed by
+                                    # the old fall-through bug and reinit()'s
+                                    # own get_hw_info call then SUCCEEDED -
+                                    # the hammering retry loop below (5 rapid
+                                    # attempts) instead wedges the DA2 (device
+                                    # disconnected). OPLUS_SKIP_HWINFO=1 skips
+                                    # this loop entirely and lets reinit()
+                                    # make the (single, second) attempt -
+                                    # the exact log1@2 flow.
+                                    import os as _os
+                                    if _os.environ.get("OPLUS_SKIP_HWINFO", "0") == "1":
+                                        self.info("Skipping post-SLA get_hw_info loop (OPLUS_SKIP_HWINFO=1) - reinit() will retry once")
+                                    else:
+                                        try:
+                                            _delay = float(_os.environ.get("OPLUS_HW_RETRY_DELAY", "0.5"))
+                                        except ValueError:
+                                            _delay = 0.5
+                                        try:
+                                            _retries = int(_os.environ.get("OPLUS_HW_RETRY_COUNT", "5"))
+                                        except ValueError:
+                                            _retries = 5
+                                        hw = False
+                                        for _attempt in range(_retries):
+                                            _time.sleep(_delay)
+                                            hw = self.get_hw_info()
+                                            if hw:
+                                                break
+                                            self.info(f"get_hw_info failed (attempt {_attempt + 1}) - retrying")
+                                        if not hw:
+                                            self.error("get_hw_info failed too many times - storage type unknown")
                                     # return True
                                 else:
                                     self.dev_info = self.get_dev_info()
@@ -978,7 +1157,18 @@ class DAXML(metaclass=LogBase):
                                     return False
                                 else:
                                     print("SLA Signature was accepted.")
-            self.reinit(True)
+            # OPLUS: with OPLUS_SKIP_HWINFO=1 skip reinit()'s get_hw_info too.
+            # In the log1@2 session BOTH get_hw_info attempts (post-SLA loop
+            # and reinit) silently failed with EIO and the session RECOVERED -
+            # because the host sent nothing in between and went straight to
+            # CUSTOM. Today the flush/retry machinery inside that doomed
+            # call wedges the device (USB disconnect within ~1s). Exact
+            # log1@2 replication: SLA -> (nothing) -> CUSTOM.
+            import os as _os
+            if _os.environ.get("OPLUS_SKIP_HWINFO", "0") == "1":
+                self.info("Skipping reinit get_hw_info (OPLUS_SKIP_HWINFO=1) - going straight to CUSTOM")
+            else:
+                self.reinit(True)
             self.check_lifecycle()
             if self.mtk.daloader.patch:
                 xdata = self.xmlft.patch()
@@ -1011,7 +1201,39 @@ class DAXML(metaclass=LogBase):
                         if self.xmlft.ack():
                             self.info("DA XML Extensions successfully loaded.")
                             self.daext = True
+                            # Storage may still be unknown (OPLUS_SKIP_HWINFO=1
+                            # skipped get_hw_info). OPLUS_STORAGE=ufs seeds the
+                            # host-side config with the values captured in the
+                            # 19:43 GET-HW-INFO XML (rmx3630_session doc) so
+                            # custom_set_storage tells the DA "UFS" and reads
+                            # address LUA2 correctly.
+                            import os as _os
+                            _stor = _os.environ.get("OPLUS_STORAGE", "").lower()
+                            if _stor in ("ufs", "emmc") and self.daconfig.storage.flashtype is None:
+                                self.daconfig.storage.flashtype = _stor
+                                self.config.pagesize = 4096
+                                if _stor == "ufs":
+                                    import struct as _s
+                                    u = self.daconfig.storage.ufs
+                                    u.block_size = int(_os.environ.get("OPLUS_UFS_BLOCKSIZE", "0x1000"), 16)
+                                    u.lu0_size = int(_os.environ.get("OPLUS_UFS_LUA0", "0x400000"), 16)
+                                    u.lu1_size = int(_os.environ.get("OPLUS_UFS_LUA1", "0x400000"), 16)
+                                    u.lu2_size = int(_os.environ.get("OPLUS_UFS_LUA2", "0x1dcb000000"), 16)
+                                    u.lu3_size = 0
+                                    self.daconfig.storage.set_flash_size()
+                                    self.info(f"Storage pre-seeded from OPLUS_STORAGE=ufs "
+                                              f"(block 0x{u.block_size:x}, lua2 0x{u.lu2_size:x})")
                             self.xmlft.custom_set_storage(ufs=self.daconfig.storage.flashtype == "ufs")
+                            # Late get_hw_info: right after the extensions the
+                            # protocol is confirmed in sync (CUSTOM just worked),
+                            # so ONE single-shot get_hw_info is now safe - unlike
+                            # the first post-SLA position where it always EIOs.
+                            if _os.environ.get("OPLUS_HWINFO_LATE", "0") == "1":
+                                self.info("Late get_hw_info attempt (OPLUS_HWINFO_LATE=1)...")
+                                if self.get_hw_info():
+                                    self.info("Late get_hw_info OK - storage configured")
+                                else:
+                                    self.info("Late get_hw_info failed (harmless, OPLUS_STORAGE fallback stays)")
                         else:
                             self.error("DA XML Extensions failed.")
                             self.daext = False
