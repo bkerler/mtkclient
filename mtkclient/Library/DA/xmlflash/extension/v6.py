@@ -1168,7 +1168,17 @@ class XmlFlashExt(metaclass=LogBase):
             ret, writedata = sc_org.create(lockflag=lockflag)
         if ret is False:
             return False, writedata
-        if self.xflash.writeflash(addr=partition.sector * self.mtk.daloader.daconfig.pagesize,
+        # FIX (RMX3630/OPLUS session 2026-10-23): the write address must use
+        # the GPT LBA size, NOT daconfig.pagesize. With get_hw_info skipped
+        # (OPLUS_SKIP_HWINFO=1) daconfig.pagesize stays at its 512 default
+        # while the GPT is built on a 4096-byte LBA - the write then lands
+        # sector*512 bytes into the user area (observed: the unlock block
+        # landed inside oplusreserve2 at 0x4800000 while seccfg lives at
+        # 0x24000000). guid_gpt.sectorsize is the authoritative LBA size.
+        addr = partition.sector * guid_gpt.sectorsize
+        self.info(f"Writing seccfg ({len(writedata)}B) to LBA {partition.sector} "
+                  f"(0x{addr:x}, sectorsize {guid_gpt.sectorsize})")
+        if self.xflash.writeflash(addr=addr,
                                   length=len(writedata),
                                   filename="", wdata=writedata, parttype="user", display=True):
             return True, "Successfully wrote seccfg."
