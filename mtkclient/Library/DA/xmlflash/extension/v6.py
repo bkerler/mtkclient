@@ -1150,10 +1150,32 @@ class XmlFlashExt(metaclass=LogBase):
         if seccfg_data.find(b"\x4D\x4D\x4D\x4D") == -1:
             # seccfg area reads all-zero: on this OPLUS DA2 a hung/aborted
             # WRITE-FLASH run zeroed the partition (observed 2026-10-23).
-            # Offer recovery from the user's backup via seccfg-restore below.
-            return False, ("SecCfg is empty (all-zero area). If you have a "
-                           "seccfg backup, restore it first: "
-                           "mtk.py wf seccfg,<backupfile> or the seccfg-restore path. Aborting unlock.")
+            # The DA re-generates a fresh seccfg on ANY full WRITE-PARTITION
+            # write (observed: a write over an all-zero area produced a
+            # valid V4) - so build the unlock payload WITHOUT parsing:
+            # force the V4 builder (its hash comes from the DA's own SEJ
+            # via custom_sej_hw, hwtype V4) and let create() do the rest.
+            self.warning("seccfg is all-zero - forcing a fresh V4 unlock "
+                         "payload (no parse: nothing to parse)")
+            hwc = self.cryptosetup()
+            sc_org = SecCfgV4(hwc, self.mtk, self.custom_sej_hw)
+            sc_org.hwtype = "V4"
+            ret, writedata = sc_org.create(lockflag=lockflag)
+            if ret is False:
+                return False, writedata
+            import os as _os2
+            if _os2.environ.get("OPLUS_WRITE_CMD", "WRITE-PARTITION") == "WRITE-PARTITION":
+                data, guid_gpt2 = self.xflash.partition.get_gpt(self.mtk.config.gpt_settings, "user")
+                for rp in guid_gpt2.partentries:
+                    if rp.name == "seccfg":
+                        fullsize = rp.sectors * guid_gpt2.sectorsize
+                        self.info(f"Writing fresh unlock payload ({len(writedata)}B padded "
+                                  f"to {fullsize}B) over the all-zero seccfg")
+                        wd = bytes(bytearray(writedata) + bytes(fullsize - len(writedata)))
+                        ok, msg = self.seccfg_write_partition(rp, wd)
+                        return ok, msg
+                return False, "seccfg partition not found during zero-recovery."
+            return False, "seccfg all-zero and WRITE-PARTITION mode disabled."
         if seccfg_data[:4] != pack("<I", 0x4D4D4D4D):
             return False, "Unknown seccfg partition header. Aborting unlock."
         hwc = self.cryptosetup()
