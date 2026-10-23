@@ -1,0 +1,76 @@
+(LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig
+DaHandler - Requesting available partitions ....
+DAXML - [LIB]: Read flash isn't supported
+!!! STALE SESSION detected (no handshake in log).
+!!! POWER-CYCLE THE PHONE fully (hold Power ~10s / let it boot),
+!!! then re-enter preloader mode. Next attempt waits for the port.
+=== ATTEMPT 2 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig
+DaHandler - Requesting available partitions ....
+DAXML - [LIB]: Read flash isn't supported
+!!! STALE SESSION detected (no handshake in log).
+!!! POWER-CYCLE THE PHONE fully (hold Power ~10s / let it boot),
+!!! then re-enter preloader mode. Next attempt waits for the port.
+=== ATTEMPT 3 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig
+DaHandler - Requesting available partitions ....
+DAXML - [LIB]: Read flash isn't supported
+!!! STALE SESSION detected (no handshake in log).
+!!! POWER-CYCLE THE PHONE fully (hold Power ~10s / let it boot),
+!!! then re-enter preloader mode. Next attempt waits for the port.
+=== ATTEMPT 4 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+no preloader port in 36s, retrying...
+=== ATTEMPT 5 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+no preloader port in 36s, retrying...
+=== ATTEMPT 6 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig
+DaHandler - Requesting available partitions ....
+DAXML - [LIB]: Read flash isn't supported
+!!! STALE SESSION detected (no handshake in log).
+!!! POWER-CYCLE THE PHONE fully (hold Power ~10s / let it boot),
+!!! then re-enter preloader mode. Next attempt waits for the port.
+=== ATTEMPT 7 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig
+DaHandler - Requesting available partitions ....
+DAXML - [LIB]: Read flash isn't supported
+!!! STALE SESSION detected (no handshake in log).
+!!! POWER-CYCLE THE PHONE fully (hold Power ~10s / let it boot),
+!!! then re-enter preloader mode. Next attempt waits for the port.
+=== ATTEMPT 8 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig
+DaHandler - Requesting available partitions ....
+DAXML - [LIB]: Read flash isn't supported
+!!! STALE SESSION detected (no handshake in log).
+!!! POWER-CYCLE THE PHONE fully (hold Power ~10s / let it boot),
+!!! then re-enter preloader mode. Next attempt waits for the port.
+=== ATTEMPT 9 (LEVEL=1 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+^C
+musin@tomato:~$

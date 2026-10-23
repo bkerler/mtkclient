@@ -1,0 +1,26 @@
+/home/musin/run_mtk_dabr_loop.sh
+=== ATTEMPT 1 (LEVEL=3 NOSPEED=0) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+Exploitation - OPLUS DA2 detected - skipping generic patch_da (runtime patches handle the auth layer)
+Exploitation - Heapbait succeeded.
+DAXML - OPLUS patch level: 3
+DAXML - Runtime-patched cust_security_verify_sec_policy @ 0x40007abc
+DAXML - Runtime-patched oplus_security_verify_sec_policy -> RET0 + status=1 @ 0x400103dc
+DAXML - Runtime-patched DA.SLA ENABLED->DISABLE @ 0x400416bf
+DAXML - DA XML SLA is disabled
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+=== ATTEMPT 2 (LEVEL=3 NOSPEED=0) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+Exploitation - OPLUS DA2 detected - skipping generic patch_da (runtime patches handle the auth layer)
+Exploitation - Heapbait succeeded.
+DAXML - OPLUS patch level: 3
+DAXML - Runtime-patched cust_security_verify_sec_policy @ 0x40007abc
+DAXML - Runtime-patched oplus_security_verify_sec_policy -> RET0 + status=1 @ 0x400103dc
+DAXML - Runtime-patched DA.SLA ENABLED->DISABLE @ 0x400416bf
+DAXML - DA XML SLA is disabled
+DAXML - [LIB]: GET-HW-INFO command failed
+DAXML - [LIB]: Error: Cannot Reinit daconfig

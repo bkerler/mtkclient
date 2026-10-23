@@ -1,0 +1,85 @@
+DAconfig - Using custom loader: /home/musin/firmware/extracted/IMAGES/download_agent/DA_BR.bin
+Preloader - Status: Waiting for PreLoader VCOM, please reconnect mobile/iot device to brom mode
+
+Port - Hint:
+
+Power off the phone before connecting.
+For brom mode, press and hold vol up, vol dwn, or all hw buttons and connect usb.
+For preloader mode, don't press any hw button and connect usb.
+If it is already connected and on, hold power for 10 seconds to reset.
+
+
+Port - Device detected :)
+Preloader - Detected regular mode !
+Preloader - 	CPU:			MT6789/MT8781V(MTK Helio G99)
+Preloader - 	HW version:		0x0
+Preloader - 	WDT:			0x10007000
+Preloader - 	Uart:			0x11002000
+Preloader - 	Brom payload addr:	0x100a00
+Preloader - 	DA payload addr:	0x201000
+Preloader - 	Var1:			0xa
+Preloader - Disabling Watchdog...
+Preloader - HW code:			0x1208
+Preloader - Target config:		0x5
+Preloader - 	SBC enabled:		True
+Preloader - 	SLA enabled:		False
+Preloader - 	DAA enabled:		True
+Preloader - 	SWJTAG enabled:		True
+Preloader - 	EPP_PARAM at 0x600 after EMMC_BOOT/SDMMC_BOOT:	False
+Preloader - 	Root cert required:	False
+Preloader - 	Mem read auth:		False
+Preloader - 	Mem write auth:		False
+Preloader - 	Cmd 0xC8 blocked:	False
+Preloader - Get Target info
+Preloader - 	HW subcode:		0x8a00
+Preloader - 	HW Ver:			0xca00
+Preloader - 	SW Ver:			0x0
+Preloader - ME_ID:			F011C69B30B4745916C849C7BA1F1CAA
+Preloader - SOC_ID:			639950D925C484706500536B626B20C4C67FD76B912EF9A5322150212EE571D7
+DaHandler - Device is protected.
+DaHandler - Device is in Preloader-Mode.
+DAXML - Uploading xflash stage 1 from DA_BR.bin
+DAXML - Successfully uploaded stage 1, jumping ..
+Preloader - Jumping to 0x200000
+Preloader - Jumping to 0x200000: ok.
+DAXML - DA Stage 1 successfully loaded.
+Exploitation - V6 Device is patched against carbonara :(
+DAXML - Uploading stage 2...
+Done |----------| 1.2% Upload: (0x1000/0x56EC8),0.00 MB/sProgress: |----------| 2.3% Upload: (0x2000/0x56EC8), 1.86 MB/s  Progress: |----------| 3.5% Upload: (0x3000/0x56EC8), 1.86 MB/s  Progress: |----------| 4.6% Upload: (0x4000/0x56EC8), 1.8 MB/s  Progress: |█---------| 5.8% Upload: (0x5000/0x56EC8), 2.0 MB/s  Progress: |█---------| 6.9% Upload: (0x6000/0x56EC8), 2.06 MB/s  Progress: |█---------| 8.1% Upload: (0x7000/0x56EC8), 2.11 MB/s  Progress: |█---------| 9.2% Upload: (0x8000/0x56EC8), 2.4 MB/s  Progress: |█---------| 10.4% Upload: (0x9000/0x56EC8), 2.84 MB/s  Progress: |█---------| 11.5% Upload: (0xA000/0x56EC8), 2.28 MB/s  Progress: |█---------| 12.7% Upload: (0xB000/0x56EC8), 1.79 MB/s  Progress: |█---------| 13.8% Upload: (0xC000/0x56EC8), 1.67 MB/s  Progress: |█---------| 15.0% Upload: (0xD000/0x56EC8), 1.92 MB/s  Progress: |██--------| 16.1% Upload: (0xE000/0x56EC8), 1.95 MB/s  Progress: |██--------| 17.3% Upload: (0xF000/0x56EC8), 2.03 MB/s  Progress: |██--------| 18.4% Upload: (0x10000/0x56EC8), 1.77 MB/s  Progress: |██--------| 19.6% Upload: (0x11000/0x56EC8), 1.93 MB/s  Progress: |██--------| 20.7% Upload: (0x12000/0x56EC8), 2.12 MB/s  Progress: |██--------| 21.9% Upload: (0x13000/0x56EC8), 2.06 MB/s  Progress: |██--------| 23.0% Upload: (0x14000/0x56EC8), 1.85 MB/s  Progress: |██--------| 24.2% Upload: (0x15000/0x56EC8), 2.07 MB/s  Progress: |███-------| 25.3% Upload: (0x16000/0x56EC8), 2.08 MB/s  Progress: |███-------| 26.5% Upload: (0x17000/0x56EC8), 1.85 MB/s  Progress: |███-------| 27.6% Upload: (0x18000/0x56EC8), 2.09 MB/s  Progress: |███-------| 28.8% Upload: (0x19000/0x56EC8), 1.92 MB/s  Progress: |███-------| 29.9% Upload: (0x1A000/0x56EC8), 1.96 MB/s  Progress: |███-------| 31.1% Upload: (0x1B000/0x56EC8), 2.08 MB/s  Progress: |███-------| 32.2% Upload: (0x1C000/0x56EC8), 1.98 MB/s  Progress: |███-------| 33.4% Upload: (0x1D000/0x56EC8), 2.04 MB/s  Progress: |███-------| 34.5% Upload: (0x1E000/0x56EC8), 1.74 MB/s  Progress: |████------| 35.7% Upload: (0x1F000/0x56EC8), 1.97 MB/s  Progress: |████------| 36.8% Upload: (0x20000/0x56EC8), 2.1 MB/s  Progress: |████------| 38.0% Upload: (0x21000/0x56EC8), 2.03 MB/s  Progress: |████------| 39.1% Upload: (0x22000/0x56EC8), 1.74 MB/s  Progress: |████------| 40.3% Upload: (0x23000/0x56EC8), 1.98 MB/s  Progress: |████------| 41.4% Upload: (0x24000/0x56EC8), 1.84 MB/s  Progress: |████------| 42.6% Upload: (0x25000/0x56EC8), 1.96 MB/s  Progress: |████------| 43.7% Upload: (0x26000/0x56EC8), 2.15 MB/s  Progress: |████------| 44.9% Upload: (0x27000/0x56EC8), 1.9 MB/s  Progress: |█████-----| 46.0% Upload: (0x28000/0x56EC8), 1.94 MB/s  Progress: |█████-----| 47.2% Upload: (0x29000/0x56EC8), 2.07 MB/s  Progress: |█████-----| 48.3% Upload: (0x2A000/0x56EC8), 1.94 MB/s  Progress: |█████-----| 49.5% Upload: (0x2B000/0x56EC8), 2.08 MB/s  Progress: |█████-----| 50.6% Upload: (0x2C000/0x56EC8), 2.07 MB/s  Progress: |█████-----| 51.8% Upload: (0x2D000/0x56EC8), 2.28 MB/s  Progress: |█████-----| 52.9% Upload: (0x2E000/0x56EC8), 2.24 MB/s  Progress: |█████-----| 54.1% Upload: (0x2F000/0x56EC8), 2.03 MB/s  Progress: |██████----| 55.2% Upload: (0x30000/0x56EC8), 1.88 MB/s  Progress: |██████----| 56.4% Upload: (0x31000/0x56EC8), 2.04 MB/s  Progress: |██████----| 57.5% Upload: (0x32000/0x56EC8), 1.73 MB/s  Progress: |██████----| 58.7% Upload: (0x33000/0x56EC8), 2.08 MB/s  Progress: |██████----| 59.8% Upload: (0x34000/0x56EC8), 1.87 MB/s  Progress: |██████----| 61.0% Upload: (0x35000/0x56EC8), 2.1 MB/s  Progress: |██████----| 62.1% Upload: (0x36000/0x56EC8), 2.07 MB/s  Progress: |██████----| 63.3% Upload: (0x37000/0x56EC8), 1.92 MB/s  Progress: |██████----| 64.4% Upload: (0x38000/0x56EC8), 1.99 MB/s  Progress: |███████---| 65.6% Upload: (0x39000/0x56EC8), 1.96 MB/s  Progress: |███████---| 66.7% Upload: (0x3A000/0x56EC8), 2.1 MB/s  Progress: |███████---| 67.9% Upload: (0x3B000/0x56EC8), 2.03 MB/s  Progress: |███████---| 69.0% Upload: (0x3C000/0x56EC8), 1.87 MB/s  Progress: |███████---| 70.2% Upload: (0x3D000/0x56EC8), 2.26 MB/s  Progress: |███████---| 71.3% Upload: (0x3E000/0x56EC8), 1.83 MB/s  Progress: |███████---| 72.5% Upload: (0x3F000/0x56EC8), 1.92 MB/s  Progress: |███████---| 73.6% Upload: (0x40000/0x56EC8), 1.76 MB/s  Progress: |███████---| 74.8% Upload: (0x41000/0x56EC8), 1.91 MB/s  Progress: |████████--| 75.9% Upload: (0x42000/0x56EC8), 1.74 MB/s  Progress: |████████--| 77.1% Upload: (0x43000/0x56EC8), 1.88 MB/s  Progress: |████████--| 78.2% Upload: (0x44000/0x56EC8), 1.96 MB/s  Progress: |████████--| 79.4% Upload: (0x45000/0x56EC8), 2.24 MB/s  Progress: |████████--| 80.5% Upload: (0x46000/0x56EC8), 2.23 MB/s  Progress: |████████--| 81.7% Upload: (0x47000/0x56EC8), 2.18 MB/s  Progress: |████████--| 82.8% Upload: (0x48000/0x56EC8), 1.84 MB/s  Progress: |████████--| 84.0% Upload: (0x49000/0x56EC8), 1.96 MB/s  Progress: |█████████-| 85.1% Upload: (0x4A000/0x56EC8), 1.86 MB/s  Progress: |█████████-| 86.3% Upload: (0x4B000/0x56EC8), 1.93 MB/s  Progress: |█████████-| 87.4% Upload: (0x4C000/0x56EC8), 1.93 MB/s  Progress: |█████████-| 88.6% Upload: (0x4D000/0x56EC8), 2.14 MB/s  Progress: |█████████-| 89.7% Upload: (0x4E000/0x56EC8), 1.98 MB/s  Progress: |█████████-| 90.9% Upload: (0x4F000/0x56EC8), 2.21 MB/s  Progress: |█████████-| 92.0% Upload: (0x50000/0x56EC8), 2.26 MB/s  Progress: |█████████-| 93.2% Upload: (0x51000/0x56EC8), 2.4 MB/s  Progress: |█████████-| 94.3% Upload: (0x52000/0x56EC8), 2.19 MB/s  Progress: |██████████| 95.5% Upload: (0x53000/0x56EC8), 1.85 MB/s  Progress: |██████████| 96.6% Upload: (0x54000/0x56EC8), 1.96 MB/s  Progress: |██████████| 97.8% Upload: (0x55000/0x56EC8), 2.26 MB/s  Progress: |██████████| 98.9% Upload: (0x56000/0x56EC8), 2.84 MB/s  Progress: |██████████| 100.0% Upload: (0x56EC8/0x56EC8), 2.63 MB/s  
+Exploitation - Device vulnerable to heapbait ... trying to exploit...
+DAXML - Uploading allinone signature...
+DAXML - Successfully uploaded allinone signature.
+Exploitation - Heapbait Stage 2 loaded.
+Exploitation - Heapbait Stage 3 loaded.
+Exploitation - OPLUS DA2 detected - skipping generic patch_da (runtime patches handle the auth layer)
+Exploitation - Heapbait succeeded.
+DAXML - OPLUS patch level: 1
+Done |██████████| 100.0% Upload: (0x8/0x8),0.00 MB/s
+DAXML - Runtime-patched cust_security_verify_sec_policy @ 0x40007abc
+Done |██████████| 100.0% Upload: (0x8/0x8),0.00 MB/s
+DAXML - Runtime-patched oplus_security_verify_sec_policy -> MOV R0,#0; BX LR @ 0x400103dc
+DAXML - Successfully booted to stage 2
+DAXML - DA XML SLA is enabled
+No valid sla key found, using dummy auth ....
+DAXML - Running sla auth...
+Done |██████████| 100.0% Upload: (0x100/0x100),0.00 MB/s
+DAXML - Successfully uploaded sla auth.
+SLA Signature was accepted.
+DeviceClass - USBError(5, 'Input/Output Error')
+DAXML
+DAXML - [LIB]: [31mGET-HW-INFO command failed[0m
+DAXML - get_hw_info failed (attempt 1) - retrying
+DAXML
+DAXML - [LIB]: [31mGET-HW-INFO command failed[0m
+DAXML - get_hw_info failed (attempt 2) - retrying
+DAXML
+DAXML - [LIB]: [31mGET-HW-INFO command failed[0m
+DAXML - get_hw_info failed (attempt 3) - retrying
+DAXML
+DAXML - [LIB]: [31mget_hw_info failed 3 times - storage type unknown[0m
+DAXML
+DAXML - [LIB]: [31mGET-HW-INFO command failed[0m
+DAXML
+DAXML - [LIB]: [31mError: Cannot Reinit daconfig[0m
+DeviceClass
+DeviceClass - [LIB]: [31mDevice disconnected[0m

@@ -1,0 +1,15 @@
+OPLUS_PATCH_LEVEL=1 /home/musin/run_mtk_dabr_loop.sh
+=== ATTEMPT 1 ===
+Exploitation - OPLUS DA2 detected - skipping generic patch_da (runtime patches handle the auth layer)
+Exploitation - Heapbait succeeded.
+DAXML - Runtime-patched cust_security_verify_sec_policy @ 0x40007abc
+DAXML - Runtime-patched oplus_security_verify_sec_policy -> MOV R0,#0; BX LR @ 0x400103dc
+DAXML - DA XML SLA is enabled
+SLA Signature was accepted.
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+CUSTOM command detected.
+DAXML - DA XML Extensions successfully loaded.
+DaHandler - Requesting available partitions ....
+DAXML - [LIB]: Read flash isn't supported
+reconnect (3-button) and press Enter
+^C

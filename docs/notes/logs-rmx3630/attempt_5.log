@@ -1,0 +1,14 @@
+DAconfig - Using custom loader: /home/musin/firmware/extracted/IMAGES/download_agent/DA_BR.bin
+DeviceClass - USBError(5, 'Input/Output Error')
+DeviceClass - USBError(5, 'Input/Output Error')
+DAXML
+DAXML - [LIB]: [31mxread: Wrong length (0): <empty/USB error>[0m
+DeviceClass - USBError(5, 'Input/Output Error')
+DAXML
+DAXML - [LIB]: [31mGET-HW-INFO command failed[0m
+DAXML
+DAXML - [LIB]: [31mError: Cannot Reinit daconfig[0m
+Main - Handling da commands ...
+DaHandler - Requesting available partitions ....
+DAXML
+DAXML - [LIB]: [31mRead flash isn't supported[0m

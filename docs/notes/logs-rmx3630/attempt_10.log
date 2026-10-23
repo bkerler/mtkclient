@@ -1,0 +1,30 @@
+DAconfig - Using custom loader: /home/musin/firmware/extracted/IMAGES/download_agent/DA_BR.bin
+DAXML
+DAXML - [LIB]: [31mGET-HW-INFO command failed[0m
+DAXML
+DAXML - [LIB]: [31mError: Cannot Reinit daconfig[0m
+Main - Handling da commands ...
+DaHandler - Requesting available partitions ....
+Traceback (most recent call last):
+  File "/home/musin/mtkclient/mtk.py", line 350, in <module>
+    sys.exit(main() or 0)
+             ^^^^^^
+  File "/home/musin/mtkclient/mtk.py", line 346, in main
+    return mtk.run(parser)
+           ^^^^^^^^^^^^^^^
+  File "/home/musin/mtkclient/mtkclient/Library/mtk_main.py", line 744, in run
+    da_handler.handle_da_cmds(mtk, cmd, self.args)
+  File "/home/musin/mtkclient/mtkclient/Library/DA/mtk_da_handler.py", line 1283, in handle_da_cmds
+    self.da_read(partitionname=partitionname, parttype=parttype, filename=filename, offset=offset,
+  File "/home/musin/mtkclient/mtkclient/Library/DA/mtk_da_handler.py", line 343, in da_read
+    gpttable = self.mtk.daloader.get_partition_data(parttype=parttype)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/musin/mtkclient/mtkclient/Library/DA/mtk_daloader.py", line 287, in get_partition_data
+    data, guid_gpt = self.da.partition.get_gpt(self.mtk.config.gpt_settings, parttype)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/musin/mtkclient/mtkclient/Library/partition.py", line 157, in get_gpt
+    fh.seek(0)
+  File "/home/musin/mtkclient/mtkclient/Library/realtime.py", line 72, in seek
+    if pos <= self.filesize:
+       ^^^^^^^^^^^^^^^^^^^^
+TypeError: '<=' not supported between instances of 'int' and 'NoneType'

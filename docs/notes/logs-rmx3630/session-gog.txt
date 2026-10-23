@@ -1,0 +1,11 @@
+/home/musin/run_mtk_dabr_loop.sh
+=== ATTEMPT 1 (LEVEL=3 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+=== ATTEMPT 2 (LEVEL=3 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...
+preloader detected - starting mtkclient
+DAXML - [LIB]: xread: Wrong length (0): <empty/USB error>
+=== ATTEMPT 3 (LEVEL=3 NOSPEED=1) ===
+enter preloader mode now; waiting for 22d9:0006...

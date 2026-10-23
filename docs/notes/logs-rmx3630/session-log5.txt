@@ -1,0 +1,23 @@
+OPLUS_PATCH_LEVEL=1 /home/musin/run_mtk_dabr_loop.sh
+=== ATTEMPT 1 ===
+reconnect (3-button) and press Enter
+
+=== ATTEMPT 2 ===
+reconnect (3-button) and press Enter
+
+=== ATTEMPT 3 ===
+reconnect (3-button) and press Enter
+
+=== ATTEMPT 4 ===
+reconnect (3-button) and press Enter
+
+=== ATTEMPT 5 ===
+Exploitation - OPLUS DA2 detected - skipping generic patch_da (runtime patches handle the auth layer)
+Exploitation - Heapbait succeeded.
+DAXML - Runtime-patched cust_security_verify_sec_policy @ 0x40007abc
+DAXML - Runtime-patched oplus_security_verify_sec_policy -> MOV R0,#0; BX LR @ 0x400103dc
+DAXML - DA XML SLA is enabled
+SLA Signature was accepted.
+reconnect (3-button) and press Enter
+^C
+musin@tomato:~$
