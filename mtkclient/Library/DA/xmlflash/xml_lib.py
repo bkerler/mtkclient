@@ -803,12 +803,19 @@ class DAXML(metaclass=LogBase):
                                     # first response (single USBError(5) / EIO). A
                                     # retry recovers - without it the storage config
                                     # stays unset and every later flash op fails.
-                                    hw = self.get_hw_info()
-                                    if not hw:
-                                        self.info("get_hw_info failed once - retrying")
+                                    # The retry needs a pause: the device-side
+                                    # endpoint may need a moment after the failed
+                                    # transfer (halt recovery).
+                                    import time as _time
+                                    hw = False
+                                    for _attempt in range(3):
+                                        _time.sleep(0.3)
                                         hw = self.get_hw_info()
+                                        if hw:
+                                            break
+                                        self.info(f"get_hw_info failed (attempt {_attempt + 1}) - retrying")
                                     if not hw:
-                                        self.error("get_hw_info failed twice - storage type unknown")
+                                        self.error("get_hw_info failed 3 times - storage type unknown")
                                     # return True
                                 else:
                                     self.dev_info = self.get_dev_info()
