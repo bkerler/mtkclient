@@ -1120,10 +1120,16 @@ class DAXML(metaclass=LogBase):
         # success anyway, and the flash commands are gated by the command-
         # table registrar (unlocked via g_oplus_auth_status=1, not by the
         # policy exchange).
+        # NOTE: still PERFORM the GET-SYS-PROPERTY roundtrip (but ignore its
+        # result): after the USB speed change / re-enumeration the first
+        # exchange acts as the session warm-up - jumping straight to
+        # GET-HW-INFO made it fail silently on every attempt.
         import os as _os
         if _os.environ.get("OPLUS_SKIP_SLA", "1") == "1" and (
                 b"OPLUS" in self.daconfig.da2 or b"oplus" in self.daconfig.da2):
-            self.info("OPLUS DA2 detected - skipping SLA policy exchange (OPLUS_SKIP_SLA=1)")
+            self.info("OPLUS DA2 detected - SLA policy exchange skipped (OPLUS_SKIP_SLA=1)")
+            data = self.get_sys_property(key="DA.SLA", length=0x200000)
+            self.debug(f"DA.SLA property (ignored): {data!r}")
             return False
         data = self.get_sys_property(key="DA.SLA", length=0x200000)
         if data is None:
