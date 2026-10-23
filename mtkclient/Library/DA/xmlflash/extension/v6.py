@@ -1148,7 +1148,12 @@ class XmlFlashExt(metaclass=LogBase):
         if not seccfg_data:
             return False, "seccfg read failed (empty data). See log above. Aborting unlock."
         if seccfg_data.find(b"\x4D\x4D\x4D\x4D") == -1:
-            return False, "SecCfg is empty. Aborting unlock."
+            # seccfg area reads all-zero: on this OPLUS DA2 a hung/aborted
+            # WRITE-FLASH run zeroed the partition (observed 2026-10-23).
+            # Offer recovery from the user's backup via seccfg-restore below.
+            return False, ("SecCfg is empty (all-zero area). If you have a "
+                           "seccfg backup, restore it first: "
+                           "mtk.py wf seccfg,<backupfile> or the seccfg-restore path. Aborting unlock.")
         if seccfg_data[:4] != pack("<I", 0x4D4D4D4D):
             return False, "Unknown seccfg partition header. Aborting unlock."
         hwc = self.cryptosetup()
