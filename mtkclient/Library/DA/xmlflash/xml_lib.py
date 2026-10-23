@@ -109,27 +109,24 @@ class DAXML(metaclass=LogBase):
         self.carbonara = Carbonara(self.mtk, loglevel)
         self.xmlft = XmlFlashExt(self.mtk, self, loglevel)
 
-    def xread(self) -> Tuple[int,int]:
-        # The OPLUS preloader CDC endpoint keeps spaming "READY" text packets
-        # even while the DA2 is running (observed: xread header received the
-        # ASCII "READY"). Every stray packet desyncs the XML protocol. At a
-        # command boundary (xread is only called at response boundaries -
-        # multi-packet payload reads bypass xread) it is safe to flush stale
-        # data before reading the real header.
-        import os as _os
-        if _os.environ.get("OPLUS_FLUSH", "1") == "1":
-            # peek: if a packet is already pending, check it starts with the
-            # 0xFEEEEEEF magic. Stale OPLUS "READY" text does not. Only then
-            # discard, never touch real protocol packets.
+    def _flush_stale(self):
+        """Discard non-protocol stale data (OPLUS 'READY' spam) from EP_IN."""
+        for _ in range(8):
             peek = self.usbread(0x10, maxtimeout=1)
-            while peek:
-                if bytes(peek[:4]) == b"\xef\xee\xee\xef":
-                    # real packet - unread leftovers must be restored for the
-                    # header read below
-                    self.mtk.port.cdc.rxleft.extend(peek)
-                    break
-                self.debug(f"xread: flushed {len(peek)}B stale: {bytes(peek)[:32]!r}")
-                peek = self.usbread(0x10, maxtimeout=1)
+            if not peek:
+                return
+            if bytes(peek[:4]) == b"\xef\xee\xee\xef":
+                # real protocol packet - put it back for the next read
+                self.mtk.port.cdc.rxleft.extend(peek)
+                return
+            self.debug(f"flush: discarded {len(peek)}B stale: {bytes(peek)[:32]!r}")
+
+    def xread(self) -> Tuple[int,int]:
+        # NOTE: no proactive flush here. A proactive read right after the DA1
+        # jump raced with the DA boot and killed the session (EIO on every
+        # attempt). Stale OPLUS "READY" packets are instead handled
+        # reactively: get_command_result() flushes non-magic stale data and
+        # re-reads after a failed first response.
         while True:
             hdr = self.usbread()
             if len(hdr) not in [12,16]:
@@ -410,6 +407,14 @@ class DAXML(metaclass=LogBase):
 
     def get_command_result(self):
         data = self.get_response()
+        if not data:
+            # EIO class: the OPLUS preloader/DA occasionally drops the first
+            # transfer after a mode change (jump to DA1/DA2). Give the device
+            # a moment, flush any non-protocol stale data, then read again.
+            import time as _time
+            _time.sleep(0.3)
+            self._flush_stale()
+            data = self.get_response()
         cmd = get_field(data, "command")
         result = ""
         if cmd == '' and "OK@" in data:
