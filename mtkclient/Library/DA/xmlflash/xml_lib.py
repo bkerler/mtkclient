@@ -113,11 +113,21 @@ class DAXML(metaclass=LogBase):
         while True:
             hdr = self.usbread()
             if len(hdr) not in [12,16]:
-                self.error("xread: Wrong length")
+                # Dump the raw bytes to diagnose protocol desync (e.g. after
+                # SLA acceptance on OPLUS DA2, see docs/notes/oplus_mt6789_rmx3630.md)
+                self.error(f"xread: Wrong length ({len(hdr)}): {bytes(hdr).hex(' ') if hdr else '<empty/USB error>'}")
+                # hexdump of whatever the device actually sent
+                try:
+                    extra = self.usbread(0x100, maxtimeout=1)
+                    if extra:
+                        self.error(f"xread: raw follow-up data: {bytes(extra).hex(' ')}")
+                        self.error(f"xread: as text: {bytes(extra)!r}")
+                except Exception as e:
+                    self.debug(f"xread: no follow-up data: {e!r}")
                 return -1, -1
             magic = int.from_bytes(hdr[:4],'little')
             if magic != 0xFEEEEEEF:
-                self.error("xread: Wrong magic")
+                self.error(f"xread: Wrong magic ({hex(magic)}), hdr: {bytes(hdr).hex(' ')}")
                 return -1, -1
             datatype = int.from_bytes(hdr[4:8],'little')
             length = int.from_bytes(hdr[8:0xC],'little')
@@ -128,7 +138,7 @@ class DAXML(metaclass=LogBase):
                 try:
                     msg = data.rstrip(b"\x00").decode('utf-8', errors='replace')
                     self.config.uartlog.append(msg)
-                    self.debug(f"[DA] {priority} {msg}")
+                    self.info(f"[DA] {priority} {msg}")
                 except Exception:
                     pass
             elif datatype == DataType.DT_PROTOCOL_FLOW:
@@ -802,6 +812,17 @@ class DAXML(metaclass=LogBase):
                                 sla_signature = b"\x00" * 0x100
                                 if self.handle_sla(data=sla_signature):
                                     print("SLA Signature was accepted.")
+                                    # The OPLUS DA2 may emit an async DT_MESSAGE /
+                                    # log packet right after SLA acceptance; drain
+                                    # and log it so the protocol stays in sync
+                                    # (USBError(5) on the next command otherwise).
+                                    try:
+                                        pend = self.usbread(0x200, maxtimeout=2)
+                                        if pend:
+                                            self.info(f"Post-SLA pending data ({len(pend)}B): {bytes(pend).hex(' ')}")
+                                            self.info(f"Post-SLA pending text: {bytes(pend)!r}")
+                                    except Exception as e:
+                                        self.debug(f"Post-SLA drain: nothing pending ({e!r})")
                                     self.get_hw_info()
                                     # return True
                                 else:
