@@ -558,18 +558,66 @@ class XmlFlashExt(metaclass=LogBase):
             oplus_sec = self.archtools.find_function_from_string(
                 "[OPLUS] verify signature of device info")
             if oplus_sec:
-                da2patched[oplus_sec:oplus_sec + 8] = RET_32_R0
-                self.info("Patched oplus_security_verify_sec_policy.")
-
-            # Also patch the auth-status setter that gates the locked state:
-            oplus_auth_status = self.archtools.find_string_xref(
-                "[OPLUS]%s start, g_oplus_auth_status=%d buf_sz=%x")
-            if oplus_auth_status is not None:
-                # find the enclosing function and force success return
-                func = self.archtools.find_function_start_from_off(oplus_auth_status)
-                if func:
-                    da2patched[func:func + 4] = b"\x01\x00\xA0\xE3"  # MOV R0, #1
-                    self.info("Patched g_oplus_auth_status setter (returns 1).")
+                # oplus_security_verify_sec_policy: return 0 (= authorized) and
+                # set the global auth status g_oplus_auth_status to 1
+                # ("Download authorization Ok in oplus"). The stub is
+                # self-contained (ends with BX LR), so the function body and its
+                # stack-frame epilogue are never executed:
+                #   MOV R0, #1
+                #   LDR R1, [PC, #8]   ; literal below (g_oplus_auth_status)
+                #   STR R0, [R1]
+                #   MOV R0, #0
+                #   BX  LR
+                #   DCD <g_oplus_auth_status>
+                # ARM/Thumb: these DA2 builds are plain ARM (entry vector table
+                # starts with ARM branch instructions, e.g. 0xEA000007), which
+                # the entry check of patch_da2() rejects as ARM64; the stub is
+                # emitted in ARM encoding accordingly. A Thumb build would need
+                # a different stub.
+                g_status = 0
+                status_xref = self.archtools.find_string_xref(
+                    "[OPLUS]%s start, g_oplus_auth_status=%d buf_sz=%x")
+                if status_xref is not None:
+                    # The compiler interleaves the movw/movt halves of two
+                    # adjacent literals (g_oplus_auth_status pointer and the
+                    # log-format string pointer), e.g.:
+                    #   movw r0,#0x455c ; movw r1,#0x5268
+                    #   movt r0,#0x4005 ; movt r1,#0x4004
+                    # So scan the window for movw/movt pairs sharing the SAME
+                    # destination register (gap up to 2 instructions) and pick
+                    # the one pointing into the globals/data page (log strings
+                    # live in 0x4004xxxx on this build).
+                    import struct as _struct
+                    found = False
+                    for k in range(status_xref - 0x40, status_xref + 0x10, 4):
+                        w = _struct.unpack("<I", da2patched[k:k + 4])[0]
+                        if (w & 0x0FF00000) != 0x03000000:
+                            continue
+                        rd = (w >> 12) & 0xF
+                        for step in (4, 8):
+                            n = _struct.unpack("<I", da2patched[k + step:k + step + 4])[0]
+                            if (n & 0x0FF00000) != 0x03400000 or (n >> 12) & 0xF != rd:
+                                continue
+                            addr = ((((n >> 4) & 0xF000) | (n & 0xFFF)) << 16) + \
+                                   ((w >> 4) & 0xF000) | (w & 0xFFF)
+                            # globals live above the string region on this build
+                            if addr > 0x40040000 and (addr & 3) == 0:
+                                g_status = addr
+                                found = True
+                                break
+                        if found:
+                            break
+                stub = bytearray(b"\x01\x00\xA0\xE3"   # MOV R0, #1
+                                 b"\x08\x10\x9F\xE5"   # LDR R1, [PC, #8]
+                                 b"\x00\x00\x81\xE5"   # STR R0, [R1]
+                                 b"\x00\x00\xA0\xE3"   # MOV R0, #0
+                                 b"\x1E\xFF\x2F\xE1"   # BX LR
+                                 b"\x00\x00\x00\x00")  # literal
+                if g_status:
+                    stub[20:24] = g_status.to_bytes(4, "little")
+                da2patched[oplus_sec:oplus_sec + len(stub)] = stub
+                self.info(f"Patched oplus_security_verify_sec_policy @ {hex(oplus_sec)}"
+                          + (f" (g_oplus_auth_status @ {hex(g_status)})" if g_status else ""))
 
             sec_pol = self.archtools.find_function_from_string("[SEC_POLICY] sboot_state = 0x%x\n")
             if sec_pol:

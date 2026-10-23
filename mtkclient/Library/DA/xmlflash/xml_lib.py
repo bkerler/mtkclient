@@ -630,6 +630,112 @@ class DAXML(metaclass=LogBase):
                 return True
         return False
 
+    def apply_oplus_runtime_patches(self):
+        """
+        OPLUS (realme/OPPO) DA2 auth layer: patch the RUNNING stage-2 DA in memory
+        using the heapbait exploit's patch_mem primitive (CMD:EXP-PATCH-MEM).
+
+        The DA2 binary itself must NOT be patched before boot (DA1 verifies the
+        DA2 image hash at boot and resets on a mismatch), so all vendor-specific
+        security checks are neutralized here, in RAM, after the exploit.
+
+        Analyzed on the RMX3630 (MT6789) DA2, but all targets are located
+        dynamically via string xrefs, so this works for other OPLUS DA2 builds.
+        """
+        da2 = self.daconfig.da2
+        da2address = self.daconfig.da_loader.region[2].m_start_addr
+        from mtkclient.Library.Exploit.exptools.arm_tools import ArmTools
+        at = ArmTools(da2, da2address)
+
+        ret_r0 = b"\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1"  # MOV R0, #0 ; BX LR
+
+        patches = []
+
+        # 1. cust_security_verify_sec_policy: MTK-side wrapper called by the
+        #    CMD:SECURITY-SET-FLASH-POLICY handler. It calls
+        #    oplus_security_verify_sec_policy() and maps "!= 0" to -1 (denied).
+        #    Returning 0 here means "policy verified / authorized".
+        off = at.find_function_from_string("cust_security_verify_sec_policy")
+        if off is not None:
+            patches.append(("cust_security_verify_sec_policy", at.offset_to_va(off), ret_r0))
+
+        # 2. oplus_security_verify_sec_policy: the OPLUS-side verifier (prints
+        #    "Server is not authenticated. Locked." on failure). Return 0 (= ok)
+        #    and set the global auth status g_oplus_auth_status to 1
+        #    ("Download authorization Ok in oplus"):
+        #       MOV R0, #1
+        #       LDR R1, [PC, #8]   ; literal below
+        #       STR R0, [R1]
+        #       MOV R0, #0
+        #       BX  LR
+        #       DCD  g_oplus_auth_status
+        off = at.find_function_from_string("[OPLUS] verify signature of device info")
+        if off is not None:
+            g_status = 0
+            xref = at.find_string_xref("[OPLUS]%s start, g_oplus_auth_status=%d buf_sz=%x")
+            if xref is not None:
+                # The compiler interleaves the movw/movt halves of two adjacent
+                # literals (g_oplus_auth_status pointer and the log-format
+                # string pointer):
+                #   movw r0,#0x455c ; movw r1,#0x5268
+                #   movt r0,#0x4005 ; movt r1,#0x4004
+                # So scan the window for movw/movt pairs sharing the SAME
+                # destination register (gap up to 2 instructions) and pick the
+                # one pointing into the globals/data page (log strings live in
+                # 0x4004xxxx on this build).
+                import struct as _struct
+                found = False
+                for k in range(xref - 0x40, xref + 0x10, 4):
+                    w = _struct.unpack("<I", da2[k:k + 4])[0]
+                    if (w & 0x0FF00000) != 0x03000000:
+                        continue
+                    rd = (w >> 12) & 0xF
+                    for step in (4, 8):
+                        n = _struct.unpack("<I", da2[k + step:k + step + 4])[0]
+                        if (n & 0x0FF00000) != 0x03400000 or (n >> 12) & 0xF != rd:
+                            continue
+                        addr = ((((n >> 4) & 0xF000) | (n & 0xFFF)) << 16) + \
+                               ((w >> 4) & 0xF000) | (w & 0xFFF)
+                        if addr > 0x40040000 and (addr & 3) == 0:
+                            g_status = addr
+                            found = True
+                            break
+                    if found:
+                        break
+            stub = bytearray(b"\x01\x00\xA0\xE3"  # MOV R0, #1
+                             b"\x08\x10\x9F\xE5"  # LDR R1, [PC, #8]
+                             b"\x00\x00\x81\xE5"  # STR R0, [R1]
+                             b"\x00\x00\xA0\xE3"  # MOV R0, #0
+                             b"\x1E\xFF\x2F\xE1"  # BX LR
+                             b"\x00\x00\x00\x00")  # literal
+            if g_status:
+                stub[20:24] = g_status.to_bytes(4, "little")
+            patches.append(("oplus_security_verify_sec_policy(+auth_status=1)",
+                            at.offset_to_va(off), bytes(stub)))
+
+        # 3. DA.SLA property value: "DA.SLA\0ENABLED" -> "DA.SLA\0DISABLE".
+        #    check_sla() asks the DA for this property; with DISABLED the host
+        #    skips the SLA signature dance that the OPLUS DA2 always rejects.
+        #    (heapbait's own patch_da() writes this patch to the file offset
+        #    instead of the runtime VA - a no-op - so we do it correctly here.)
+        idx = da2.find(b"DA.SLA\x00ENABLED")
+        if idx != -1:
+            patches.append(("DA.SLA ENABLED->DISABLE",
+                            da2address + idx + len(b"DA.SLA\x00"), b"DISABLE"))
+
+        if not patches:
+            self.warning("No OPLUS runtime patch targets found in DA2")
+            return
+
+        for name, addr, data in patches:
+            try:
+                if self.heapbait.patch_mem(addr, data):
+                    self.info(f"Runtime-patched {name} @ {hex(addr)}")
+                else:
+                    self.error(f"Failed to patch {name} @ {hex(addr)}")
+            except Exception as e:
+                self.error(f"Error patching {name}: {e!r}")
+
     def upload_da(self):
         self.daext = False
         if self.upload_da1():
@@ -645,17 +751,14 @@ class DAXML(metaclass=LogBase):
                     if loaded:
                         self.mtk.daloader.patch = True
                 elif self.mtk.config.target_config["sbc"] and self.heapbait.is_vulnerable():
-                    # Patch DA2 binary (OPLUS SLA/security checks) BEFORE booting:
-                    try:
-                        pda2 = self.xmlft.patch_da2(da2)
-                        if pda2:
-                            self.info("DA2 pre-patched via xmlft.patch_da2 (heapbait path)")
-                            da2 = pda2
-                    except Exception as e:
-                        self.error(f"patch_da2 failed: {e!r} - using unpatched da2")
+                    # NOTE: do NOT pre-patch the DA2 binary here. DA1 validates the
+                    # DA2 image hash at boot ("DA hash mismatch" otherwise), so the
+                    # DA2 must be uploaded unpatched. All patches are applied to the
+                    # RUNNING DA2 after the heapbait exploit gives us patch_mem().
                     loaded = self.boot_to(da2offset, da2)
                     if self.heapbait.run_exploit():
                         self.mtk.daloader.patch = True
+                        self.apply_oplus_runtime_patches()
                 else:
                     # We cannot patch, run with stock da2 :(
                     loaded = self.boot_to(da2offset, da2)
@@ -671,15 +774,6 @@ class DAXML(metaclass=LogBase):
                 self.info("Successfully booted to stage 2")
                 self.setup_hw_init()
                 self.change_usb_speed()
-                if self.mtk.daloader.patch:
-                    # Patch the RUNNING DA2 memory (OPLUS SLA/security checks)
-                    # BEFORE the SLA gate - otherwise the locked DA2 refuses
-                    # everything and kills the session.
-                    try:
-                        self.info("Applying xmlft.patch() to running DA2 before SLA check")
-                        self.xmlft.patch()
-                    except Exception as e:
-                        self.error(f"xmlft.patch() failed: {e!r}")
                 res = self.check_sla()
                 if isinstance(res, bool):
                     if not res:
