@@ -1199,6 +1199,18 @@ class XmlFlashExt(metaclass=LogBase):
         # target area!). WRITE-PARTITION by name is the safe route.
         import os as _os
         if _os.environ.get("OPLUS_WRITE_CMD", "WRITE-PARTITION") == "WRITE-PARTITION":
+            # IMPORTANT (observed 2026-10-23): a PARTIAL write (512B payload for
+            # the 8MB seccfg partition) left the partition ZEROED - the DA erases
+            # the whole partition and only commits full-size writes. Pad the V4
+            # payload to the full partition size (the rest of seccfg is zero in
+            # the original layout anyway).
+            fullsize = partition.sectors * guid_gpt.sectorsize
+            if len(writedata) < fullsize:
+                self.info(f"Padding seccfg payload {len(writedata)}B -> {fullsize}B "
+                          f"(full partition size; the DA erases the whole partition)")
+                writedata = bytearray(writedata)
+                writedata += bytes(fullsize - len(writedata))
+                writedata = bytes(writedata)
             ok, msg = self.seccfg_write_partition(partition, writedata)
             if ok:
                 return True, "Successfully wrote seccfg."
