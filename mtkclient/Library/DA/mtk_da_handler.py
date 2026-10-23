@@ -575,6 +575,7 @@ class DaHandler(metaclass=LogBase):
                                                  filename=partfilename,
                                                  parttype=parttype)
                     continue
+                self.info(f'Writing partition "{partition}" (WRITE-FLASH raw path)')
                 res = self.mtk.daloader.detect_partition(partition, parttype)
                 if res[0]:
                     rpartition = res[1]
