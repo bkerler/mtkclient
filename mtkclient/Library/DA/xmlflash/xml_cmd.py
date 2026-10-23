@@ -440,13 +440,17 @@ class XMLCmd(metaclass=LogBase):
         return cmd
 
     def cmd_write_partition(self, partition: str = "system", mem_offset: int = 0x8000000, mem_length: int = 0x100000):
+        # NOTE: upstream sent command name "WRITE-FLASH" here, but the OPLUS DA2
+        # rejects that XML shape ("Required XML node path not found") - the
+        # WRITE-PARTITION command expects partition + source_file under the
+        # CMD:WRITE-PARTITION name (mirrors cmd_read_partition).
         content = {
             "arg": [
                 f"<partition>{partition}</partition>",
                 f"<source_file>MEM://{hex(mem_offset)}:{hex(mem_length)}</source_file>"
             ]
         }
-        cmd = self.create_cmd("WRITE-FLASH", content)
+        cmd = self.create_cmd("WRITE-PARTITION", content)
         return cmd
 
     def cmd_write_flash(self, partition: str = "EMMC-USER", offset: int = 0, mem_offset: int = 0x8000000,
