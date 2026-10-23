@@ -1191,10 +1191,10 @@ class XmlFlashExt(metaclass=LogBase):
             self.info(f"Using WRITE-PARTITION for partition '{partname}'")
             # raw protocol: WRITE-PARTITION with the real partition NAME
             # (bypasses get_storage()'s "Unknown parttype" mapping)
-            self.send_command(
+            self.xflash.send_command(
                 self.cmd.cmd_write_partition(partition=partname,
                                              mem_length=len(writedata)), noack=True)
-            cmd, fileopresult = self.get_command_result()
+            cmd, fileopresult = self.xflash.get_command_result()
             if type(fileopresult) is not FileSysOp:
                 self.error(f"writeflash(WRITE-PARTITION): no FILE-SYS-OPERATION ack, "
                            f"got cmd={cmd!r} result={str(fileopresult)[:200]!r}")
@@ -1202,13 +1202,13 @@ class XmlFlashExt(metaclass=LogBase):
             if fileopresult.key != "FILE-SIZE":
                 self.error(f"writeflash(WRITE-PARTITION): unexpected FileSysOp key {fileopresult.key!r}")
                 return False, "Error on writing seccfg config to flash."
-            self.ack_value(len(writedata))
-            cmd, result = self.get_command_result()
+            self.xflash.ack_value(len(writedata))
+            cmd, result = self.xflash.get_command_result()
             if type(result) is not DwnFile:
                 self.error(f"writeflash(WRITE-PARTITION): expected DwnFile, got "
                            f"cmd={cmd!r} result={str(result)[:200]!r}")
                 return False, "Error on writing seccfg config to flash."
-            if not self.upload(result, writedata, raw=True):
+            if not self.xflash.upload(result, writedata, raw=True):
                 self.error("Error on writing seccfg config to flash (upload).")
                 return False, "Error on writing seccfg config to flash."
             return True, "Successfully wrote seccfg."
