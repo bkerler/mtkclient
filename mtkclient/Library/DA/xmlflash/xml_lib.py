@@ -110,6 +110,19 @@ class DAXML(metaclass=LogBase):
         self.xmlft = XmlFlashExt(self.mtk, self, loglevel)
 
     def xread(self) -> Tuple[int,int]:
+        # The OPLUS preloader CDC endpoint keeps spaming "READY" text packets
+        # even while the DA2 is running (observed: xread header received the
+        # ASCII "READY"). Every stray packet desyncs the XML protocol. At a
+        # command boundary (xread is only called at response boundaries -
+        # multi-packet payload reads bypass xread) it is safe to flush stale
+        # data before reading the real header.
+        import os as _os
+        if _os.environ.get("OPLUS_FLUSH", "1") == "1":
+            for _ in range(8):
+                stale = self.usbread(0x400, maxtimeout=1)
+                if not stale:
+                    break
+                self.debug(f"xread: flushed {len(stale)}B stale: {bytes(stale)[:64]!r}")
         while True:
             hdr = self.usbread()
             if len(hdr) not in [12,16]:
@@ -819,23 +832,23 @@ class DAXML(metaclass=LogBase):
                                             self.info(f"Post-SLA pending text: {bytes(pend)!r}")
                                     except Exception as e:
                                         self.debug(f"Post-SLA drain: nothing pending ({e!r})")
-                                    # GET-HW-INFO on the OPLUS DA2 sometimes loses its
-                                    # first response (single USBError(5) / EIO). A
-                                    # retry recovers - without it the storage config
-                                    # stays unset and every later flash op fails.
-                                    # The retry needs a pause: the device-side
-                                    # endpoint may need a moment after the failed
-                                    # transfer (halt recovery).
+                                    # GET-HW-INFO on the OPLUS DA2 intermittently
+                                    # loses its response (EIO). The failure is
+                                    # flaky USB, not a dead DA (observed: one
+                                    # run lost the response once and fully
+                                    # recovered). Be patient: 5 attempts, 500ms
+                                    # apart; usblib clears the endpoint halt
+                                    # after each EIO.
                                     import time as _time
                                     hw = False
-                                    for _attempt in range(3):
-                                        _time.sleep(0.3)
+                                    for _attempt in range(5):
+                                        _time.sleep(0.5)
                                         hw = self.get_hw_info()
                                         if hw:
                                             break
                                         self.info(f"get_hw_info failed (attempt {_attempt + 1}) - retrying")
                                     if not hw:
-                                        self.error("get_hw_info failed 3 times - storage type unknown")
+                                        self.error("get_hw_info failed 5 times - storage type unknown")
                                     # return True
                                 else:
                                     self.dev_info = self.get_dev_info()
