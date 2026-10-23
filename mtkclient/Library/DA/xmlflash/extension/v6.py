@@ -1194,24 +1194,34 @@ class XmlFlashExt(metaclass=LogBase):
             self.xflash.send_command(
                 self.xflash.cmd.cmd_write_partition(partition=partname,
                                                     mem_length=len(writedata)), noack=True)
-            cmd, fileopresult = self.xflash.get_command_result()
-            if type(fileopresult) is not FileSysOp:
-                self.error(f"writeflash(WRITE-PARTITION): no FILE-SYS-OPERATION ack, "
-                           f"got cmd={cmd!r} result={str(fileopresult)[:200]!r}")
-                return False, "Error on writing seccfg config to flash."
-            if fileopresult.key != "FILE-SIZE":
+            # The OPLUS DA2 verifies images: the first FILE-SYS-OPERATION may
+            # be key=EXISTS ("does <partition>.sig exist on the host?").
+            # Answer OK@0x0 (no sig) - the DA then proceeds (the deny checks
+            # are already patched); the next op is the usual FILE-SIZE.
+            for _op in range(4):
+                cmd, fileopresult = self.xflash.get_command_result()
+                if type(fileopresult) is not FileSysOp:
+                    break  # e.g. CMD:END error or DwnFile
+                self.info(f"writeflash(WRITE-PARTITION): FileSysOp key={fileopresult.key!r}")
+                if fileopresult.key == "EXISTS":
+                    self.xflash.ack_value(0)  # "OK@0x0\0" - sig file does not exist
+                    continue
+                if fileopresult.key == "FILE-SIZE":
+                    self.xflash.ack_value(len(writedata))
+                    cmd, result = self.xflash.get_command_result()
+                    if type(result) is not DwnFile:
+                        self.error(f"writeflash(WRITE-PARTITION): expected DwnFile, got "
+                                   f"cmd={cmd!r} result={str(result)[:200]!r}")
+                        return False, "Error on writing seccfg config to flash."
+                    if not self.xflash.upload(result, writedata, raw=True):
+                        self.error("Error on writing seccfg config to flash (upload).")
+                        return False, "Error on writing seccfg config to flash."
+                    return True, "Successfully wrote seccfg."
                 self.error(f"writeflash(WRITE-PARTITION): unexpected FileSysOp key {fileopresult.key!r}")
                 return False, "Error on writing seccfg config to flash."
-            self.xflash.ack_value(len(writedata))
-            cmd, result = self.xflash.get_command_result()
-            if type(result) is not DwnFile:
-                self.error(f"writeflash(WRITE-PARTITION): expected DwnFile, got "
-                           f"cmd={cmd!r} result={str(result)[:200]!r}")
-                return False, "Error on writing seccfg config to flash."
-            if not self.xflash.upload(result, writedata, raw=True):
-                self.error("Error on writing seccfg config to flash (upload).")
-                return False, "Error on writing seccfg config to flash."
-            return True, "Successfully wrote seccfg."
+            self.error(f"writeflash(WRITE-PARTITION): no usable FileSysOp, got "
+                       f"cmd={cmd!r} result={str(fileopresult)[:200]!r}")
+            return False, "Error on writing seccfg config to flash."
         if self.xflash.writeflash(addr=addr,
                                   length=len(writedata),
                                   filename="", wdata=writedata, parttype="user", display=True):
