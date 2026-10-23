@@ -799,7 +799,16 @@ class DAXML(metaclass=LogBase):
                                             self.info(f"Post-SLA pending text: {bytes(pend)!r}")
                                     except Exception as e:
                                         self.debug(f"Post-SLA drain: nothing pending ({e!r})")
-                                    self.get_hw_info()
+                                    # GET-HW-INFO on the OPLUS DA2 sometimes loses its
+                                    # first response (single USBError(5) / EIO). A
+                                    # retry recovers - without it the storage config
+                                    # stays unset and every later flash op fails.
+                                    hw = self.get_hw_info()
+                                    if not hw:
+                                        self.info("get_hw_info failed once - retrying")
+                                        hw = self.get_hw_info()
+                                    if not hw:
+                                        self.error("get_hw_info failed twice - storage type unknown")
                                     # return True
                                 else:
                                     self.dev_info = self.get_dev_info()
