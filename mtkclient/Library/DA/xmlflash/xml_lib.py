@@ -952,6 +952,19 @@ class DAXML(metaclass=LogBase):
                             0x400021a0, b"\x00\x00\xa0\xe3"))
             patches.append(("WRITE-FLASH deny-check 0x4000392c -> MOV R0,#0",
                             0x4000392c, b"\x00\x00\xa0\xe3"))
+            # The deny that actually fires for WRITE-FLASH(seccfg) is INSIDE the
+            # WRITE-FLASH handler (0x40002e60) at 0x400031d4: after the policy
+            # parse (BL 0x4002cf68) it checks TWO flag bytes -
+            #   0x40003194 LDRB r0,[sp,#0x33]; CMP r0,#1
+            #   0x400031a4 BEQ 0x400031d4        <- deny
+            #   0x400031a8 LDRBNE r0,[sp,#0x32]; CMPNE r0,#1
+            #   0x400031b0 BEQ 0x400031d4        <- deny
+            # ("Security deny for [seccfg]." - printer 0x400084a4). NOP both BEQs:
+            # the flow then always continues to the list-scan/allow path.
+            patches.append(("WRITE-FLASH handler deny-BEQ 0x400031a4 -> NOP",
+                            0x400031a4, b"\x00\x00\xa0\xe1"))
+            patches.append(("WRITE-FLASH handler deny-BEQ 0x400031b0 -> NOP",
+                            0x400031b0, b"\x00\x00\xa0\xe1"))
 
         if not patches:
             self.warning("No OPLUS runtime patch targets found in DA2")
