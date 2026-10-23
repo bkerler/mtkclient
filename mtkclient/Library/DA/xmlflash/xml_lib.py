@@ -118,11 +118,18 @@ class DAXML(metaclass=LogBase):
         # data before reading the real header.
         import os as _os
         if _os.environ.get("OPLUS_FLUSH", "1") == "1":
-            for _ in range(8):
-                stale = self.usbread(0x400, maxtimeout=1)
-                if not stale:
+            # peek: if a packet is already pending, check it starts with the
+            # 0xFEEEEEEF magic. Stale OPLUS "READY" text does not. Only then
+            # discard, never touch real protocol packets.
+            peek = self.usbread(0x10, maxtimeout=1)
+            while peek:
+                if bytes(peek[:4]) == b"\xef\xee\xee\xef":
+                    # real packet - unread leftovers must be restored for the
+                    # header read below
+                    self.mtk.port.cdc.rxleft.extend(peek)
                     break
-                self.debug(f"xread: flushed {len(stale)}B stale: {bytes(stale)[:64]!r}")
+                self.debug(f"xread: flushed {len(peek)}B stale: {bytes(peek)[:32]!r}")
+                peek = self.usbread(0x10, maxtimeout=1)
         while True:
             hdr = self.usbread()
             if len(hdr) not in [12,16]:
