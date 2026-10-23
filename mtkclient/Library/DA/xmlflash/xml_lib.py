@@ -965,6 +965,19 @@ class DAXML(metaclass=LogBase):
                             0x400031a4, b"\x00\x00\xa0\xe1"))
             patches.append(("WRITE-FLASH handler deny-BEQ 0x400031b0 -> NOP",
                             0x400031b0, b"\x00\x00\xa0\xe1"))
+            # OPLUS image-verification layer ("Security deny [seccfg]
+            # Signature(Entity) invalid."): the WRITE-FLASH/WRITE-PARTITION
+            # data flow checks the downloaded entity against the oplus image
+            # hash list. Two gates:
+            #  (a) hash-list check 0x4002f804 (single caller 0x4002ffd8) -
+            #      force-return 0 ("check ok");
+            #  (b) entity-compare loop at 0x4002fcf0 (CMP r6,#0; BEQ continue,
+            #      fallthrough -> deny print @0x4002fd04) - make the BEQ
+            #      unconditional so the deny print is never reached.
+            patches.append(("oplus image hash-list check 0x4002f804 -> MOV R0,#0; BX LR",
+                            0x4002f804, ret_r0))
+            patches.append(("entity-compare deny gate 0x4002fcf4 BEQ -> B",
+                            0x4002fcf4, b"\x08\x00\x00\xea"))
 
         if not patches:
             self.warning("No OPLUS runtime patch targets found in DA2")
