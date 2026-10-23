@@ -21,7 +21,6 @@ from mtkclient.Library.Hardware.hwcrypto import CryptoSetup, HwCrypto
 from mtkclient.Library.utils import find_binary, do_tcp_keyserver
 from mtkclient.Library.gui_utils import LogBase, progress, logsetup
 from mtkclient.Library.Hardware.seccfg import SecCfgV3, SecCfgV4
-from mtkclient.Library.DA.xmlflash.xml_lib import FileSysOp, DwnFile
 from mtkclient.Library.utils import MTKTee
 from mtkclient.Library.Exploit.exptools.aarch_tools import Aarch64Tools
 
@@ -1187,6 +1186,7 @@ class XmlFlashExt(metaclass=LogBase):
         # simpler route: partition by name, whole-partition data.
         import os as _os
         if _os.environ.get("OPLUS_WRITE_CMD", "WRITE-PARTITION") == "WRITE-PARTITION":
+            from mtkclient.Library.DA.xmlflash.xml_lib import FileSysOp, DwnFile
             partname = partition.name
             self.info(f"Using WRITE-PARTITION for partition '{partname}'")
             # raw protocol: WRITE-PARTITION with the real partition NAME
