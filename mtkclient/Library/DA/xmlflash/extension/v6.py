@@ -552,6 +552,25 @@ class XmlFlashExt(metaclass=LogBase):
                     da2patched[oppo_auth - 0x24:oppo_auth - 0x20] = b"\x05\x10\xA0\xE3"
                     self.info("Patched oppo cust_security_get_dev_fw_info.")
 
+            # OPLUS security: oplus_security_verify_sec_policy - the function that
+            # validates the (server-signed) security policy and prints
+            # 'Server is not authenticated. Locked.' when it fails. Neutralize it.
+            oplus_sec = self.archtools.find_function_from_string(
+                "[OPLUS] verify signature of device info")
+            if oplus_sec:
+                da2patched[oplus_sec:oplus_sec + 8] = RET_32_R0
+                self.info("Patched oplus_security_verify_sec_policy.")
+
+            # Also patch the auth-status setter that gates the locked state:
+            oplus_auth_status = self.archtools.find_string_xref(
+                "[OPLUS]%s start, g_oplus_auth_status=%d buf_sz=%x")
+            if oplus_auth_status is not None:
+                # find the enclosing function and force success return
+                func = self.archtools.find_function_start_from_off(oplus_auth_status)
+                if func:
+                    da2patched[func:func + 4] = b"\x01\x00\xA0\xE3"  # MOV R0, #1
+                    self.info("Patched g_oplus_auth_status setter (returns 1).")
+
             sec_pol = self.archtools.find_function_from_string("[SEC_POLICY] sboot_state = 0x%x\n")
             if sec_pol:
                 patch = RET_32_R0

@@ -605,6 +605,15 @@ class DAXML(metaclass=LogBase):
             if self.upload(result, data):
                 self.info("Successfully uploaded sla auth.")
                 return True
+            else:
+                # capture the device's response after a failed sla upload
+                try:
+                    cmd, res = self.get_command_result()
+                    self.info(f"SLA failed response: cmd={cmd} result={res!r}")
+                except Exception as e:
+                    self.info(f"SLA failed, no response: {e!r}")
+        else:
+            self.info(f"handle_sla: no DwnFile, got {type(result).__name__}: {result!r}")
         return False
 
     def handle_allinone_signature(self, data=b"\x00" * 0x100, filename:str=None, display=True, timeout=0.5):
@@ -636,6 +645,14 @@ class DAXML(metaclass=LogBase):
                     if loaded:
                         self.mtk.daloader.patch = True
                 elif self.mtk.config.target_config["sbc"] and self.heapbait.is_vulnerable():
+                    # Patch DA2 binary (OPLUS SLA/security checks) BEFORE booting:
+                    try:
+                        pda2 = self.xmlft.patch_da2(da2)
+                        if pda2:
+                            self.info("DA2 pre-patched via xmlft.patch_da2 (heapbait path)")
+                            da2 = pda2
+                    except Exception as e:
+                        self.error(f"patch_da2 failed: {e!r} - using unpatched da2")
                     loaded = self.boot_to(da2offset, da2)
                     if self.heapbait.run_exploit():
                         self.mtk.daloader.patch = True
@@ -654,6 +671,15 @@ class DAXML(metaclass=LogBase):
                 self.info("Successfully booted to stage 2")
                 self.setup_hw_init()
                 self.change_usb_speed()
+                if self.mtk.daloader.patch:
+                    # Patch the RUNNING DA2 memory (OPLUS SLA/security checks)
+                    # BEFORE the SLA gate - otherwise the locked DA2 refuses
+                    # everything and kills the session.
+                    try:
+                        self.info("Applying xmlft.patch() to running DA2 before SLA check")
+                        self.xmlft.patch()
+                    except Exception as e:
+                        self.error(f"xmlft.patch() failed: {e!r}")
                 res = self.check_sla()
                 if isinstance(res, bool):
                     if not res:
@@ -686,7 +712,15 @@ class DAXML(metaclass=LogBase):
                                     # return True
                                 else:
                                     self.dev_info = self.get_dev_info()
-                                    sla_signature = generate_da_sla_signature(data=self.dev_info["rnd"], key=rsakey.key)
+                                    if "rnd" not in self.dev_info:
+                                        self.error(f"dev_info lacks rnd: {self.dev_info!r}")
+                                        print("SLA Key wasn't accepted (no rnd).")
+                                        return False
+                                    sla_signature = generate_da_sla_signature(data=self.dev_info["rnd"], key=rsakey.key if rsakey else None) if rsakey else None
+                                    if sla_signature is None:
+                                        self.error(f"rnd={self.dev_info['rnd'].hex()} but no matching SLA RSA key - signing impossible")
+                                        print("SLA Key wasn't accepted (no key).")
+                                        return False
                                     if not self.handle_sla(data=sla_signature):
                                         print("SLA Key wasn't accepted.")
                                         return False
@@ -694,12 +728,21 @@ class DAXML(metaclass=LogBase):
                                         print("SLA Signature was accepted.")
                         else:
                             self.dev_info = self.get_dev_info()
-                            sla_signature = generate_da_sla_signature(data=self.dev_info["rnd"], key=rsakey.key)
-                            if not self.handle_sla(data=sla_signature):
-                                print("SLA Key wasn't accepted.")
-                                return False
+                            if "rnd" not in self.dev_info:
+                                self.error(f"dev_info lacks rnd: {self.dev_info!r} - retrying dummy auth")
+                                if self.handle_sla(data=b"\x00" * 0x100):
+                                    print("SLA Signature was accepted.")
+                                    self.get_hw_info()
+                                else:
+                                    print("SLA Key wasn't accepted.")
+                                    return False
                             else:
-                                print("SLA Signature was accepted.")
+                                sla_signature = generate_da_sla_signature(data=self.dev_info["rnd"], key=rsakey.key)
+                                if not self.handle_sla(data=sla_signature):
+                                    print("SLA Key wasn't accepted.")
+                                    return False
+                                else:
+                                    print("SLA Signature was accepted.")
             self.reinit(True)
             self.check_lifecycle()
             if self.mtk.daloader.patch:
@@ -758,6 +801,8 @@ class DAXML(metaclass=LogBase):
             scmd, sresult = self.get_command_result()
             self.ack()
             if sresult == "OK":
+                if not data or (b"rnd" not in data and b"hrid" not in data and b"socid" not in data):
+                    self.info(f"get_dev_info: unexpected payload ({len(data)}B): {data[:200]!r}")
                 if b"rnd" in data:
                     content["rnd"] = bytes.fromhex(get_field(data, "rnd"))
                 if b"hrid" in data:
