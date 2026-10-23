@@ -109,13 +109,17 @@ class DAXML(metaclass=LogBase):
         self.carbonara = Carbonara(self.mtk, loglevel)
         self.xmlft = XmlFlashExt(self.mtk, self, loglevel)
 
-    def _flush_stale(self):
-        """Discard non-protocol stale data (OPLUS 'READY' spam) from EP_IN."""
+    def _flush_stale(self, discard_all: bool = False):
+        """Drain EP_IN. By default only non-protocol stale data (OPLUS 'READY'
+        spam) is discarded and real packets are pushed back into rxleft.
+        After a FAILED command pass discard_all=True: everything pending
+        belongs to the aborted response and must be thrown away, otherwise
+        the stale partial response gets replayed into the next read."""
         for _ in range(8):
             peek = self.usbread(0x10, maxtimeout=1)
             if not peek:
                 return
-            if bytes(peek[:4]) == b"\xef\xee\xee\xef":
+            if not discard_all and bytes(peek[:4]) == b"\xef\xee\xee\xef":
                 # real protocol packet - put it back for the next read
                 self.mtk.port.cdc.rxleft.extend(peek)
                 return
@@ -251,8 +255,12 @@ class DAXML(metaclass=LogBase):
                 elif "ERR!" in result:
                     return result
                 else:
-                    # empty/garbled response (EIO class) - retry the command
+                    # empty/garbled response (EIO class) - discard the aborted
+                    # response's leftovers, then retry the command
                     self.debug(f"send_command: empty response, retry {_attempt + 1}")
+                    import time as _time
+                    _time.sleep(0.3)
+                    self._flush_stale(discard_all=True)
                     continue
             else:
                 return False
@@ -408,12 +416,14 @@ class DAXML(metaclass=LogBase):
     def get_command_result(self):
         data = self.get_response()
         if not data:
-            # EIO class: the OPLUS preloader/DA occasionally drops the first
-            # transfer after a mode change (jump to DA1/DA2). Give the device
-            # a moment, flush any non-protocol stale data, then read again.
+            # EIO class: the OPLUS preloader/DA occasionally drops a transfer.
+            # Give the device a moment, then DISCARD ALL pending data: any
+            # bytes still in flight belong to the aborted response. Replaying
+            # them into the next read desyncs the protocol permanently (the
+            # device then blocks and every later command times out).
             import time as _time
             _time.sleep(0.3)
-            self._flush_stale()
+            self._flush_stale(discard_all=True)
             data = self.get_response()
         cmd = get_field(data, "command")
         result = ""
