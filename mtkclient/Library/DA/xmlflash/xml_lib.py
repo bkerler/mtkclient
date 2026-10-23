@@ -771,7 +771,15 @@ class DAXML(metaclass=LogBase):
             if loaded:
                 self.info("Successfully booted to stage 2")
                 self.setup_hw_init()
-                self.change_usb_speed()
+                # change_usb_speed re-enumerates the USB device; on the OPLUS
+                # CDC preloader path the re-enum is flaky and kills the
+                # session with EIO right after SLA acceptance. Skipping it
+                # keeps the (slower) working speed.
+                import os as _os
+                if _os.environ.get("OPLUS_NO_USB_SPEED", "0") == "1":
+                    self.info("Skipping USB speed change (OPLUS_NO_USB_SPEED=1)")
+                else:
+                    self.change_usb_speed()
                 res = self.check_sla()
                 if isinstance(res, bool):
                     if not res:
