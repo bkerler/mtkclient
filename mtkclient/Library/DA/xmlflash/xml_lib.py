@@ -915,7 +915,14 @@ class DAXML(metaclass=LogBase):
         return content
 
     def get_hw_info(self):
-        self.send_command(self.cmd.cmd_get_hw_info(), noack=True)
+        # NOTE: upstream bug - when send_command fails (e.g. the OPLUS DA2
+        # loses the first GET-HW-INFO response with EIO), this function fell
+        # through to 'return True' without configuring the storage, silently
+        # breaking every later flash operation. Return False instead so the
+        # caller can retry.
+        if not self.send_command(self.cmd.cmd_get_hw_info(), noack=True):
+            self.error("GET-HW-INFO command failed")
+            return False
         cmd, result = self.get_command_result()
         if not isinstance(result, UpFile):
             return False
