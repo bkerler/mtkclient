@@ -1366,6 +1366,7 @@ class DaHandler(metaclass=LogBase):
             parttype = args.parttype
             self.da_wl(directory=directory, parttype=parttype)
         elif cmd == "wo":
+            self.info(f"wo: args={args.offset} {args.length} {args.filename} parttype={args.parttype}")
             start = getint(args.offset)
             length = getint(args.length)
             filename = args.filename
