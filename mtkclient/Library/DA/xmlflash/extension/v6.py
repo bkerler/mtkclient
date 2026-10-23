@@ -1134,9 +1134,19 @@ class XmlFlashExt(metaclass=LogBase):
                     addr=partition.sector * guid_gpt.sectorsize,
                     length=partition.sectors * guid_gpt.sectorsize,
                     filename="", parttype="user", display=False)
+                if not seccfg_data:
+                    # transient read failure: retry once (the first post-CUSTOM
+                    # read occasionally EIOs on this OPLUS DA2)
+                    self.warning("seccfg read returned empty - retrying once")
+                    seccfg_data = self.xflash.readflash(
+                        addr=partition.sector * guid_gpt.sectorsize,
+                        length=partition.sectors * guid_gpt.sectorsize,
+                        filename="", parttype="user", display=True)
                 break
         if seccfg_data is None:
             return False, "Couldn't detect existing seccfg partition. Aborting unlock."
+        if not seccfg_data:
+            return False, "seccfg read failed (empty data). See log above. Aborting unlock."
         if seccfg_data.find(b"\x4D\x4D\x4D\x4D") == -1:
             return False, "SecCfg is empty. Aborting unlock."
         if seccfg_data[:4] != pack("<I", 0x4D4D4D4D):
