@@ -805,6 +805,30 @@ class DAXML(metaclass=LogBase):
             patches.append(("DA.SLA ENABLED->DISABLE",
                             da2address + idx + len(b"DA.SLA\x00"), b"DISABLE"))
 
+        # 3. Replicate the (accidentally beneficial) 19:43 patch set: force
+        #    get_hw_sbc (0x40039d00 on this build) to return 0. Its stock
+        #    implementation reads efuse via a bogus blx-thunk (an epilogue at
+        #    0x40031504) and effectively returns 1 ("SBC enabled") from
+        #    garbage. With SBC believed on, GET-HW-INFO enters a secure path
+        #    that never answers (observed: silent hang on every post-SLA
+        #    attempt). In the 19:43 session this function was force-returned
+        #    by heapbait's generic patcher and GET-HW-INFO delivered the full
+        #    XML. Resolve via the caller of the "[SBC] sbc_en" log wrapper
+        #    (its first BL is get_hw_sbc).
+        sbc = None
+        sbc_wrap = at.find_function_from_string("[SBC] sbc_en = %d\n")
+        if sbc_wrap is not None:
+            # the log wrapper's BLs: [0] = log-level check, [1]/[2] = get_hw_sbc
+            bl1 = at.get_next_bl_from_off(sbc_wrap)
+            if bl1 is not None:
+                bl2 = at.get_next_bl_from_off(bl1 + 4)
+                if bl2 is not None:
+                    sbc = at.get_bl_target(bl2)
+        if sbc is None:
+            # fallback: fixed offset observed on this build
+            sbc = 0x40039d00
+        patches.append((f"get_hw_sbc({hex(sbc)}) -> MOV R0,#0; BX LR", sbc, ret_r0))
+
         if not patches:
             self.warning("No OPLUS runtime patch targets found in DA2")
             return
