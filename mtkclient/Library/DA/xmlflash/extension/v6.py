@@ -1160,6 +1160,32 @@ class XmlFlashExt(metaclass=LogBase):
             hwc = self.cryptosetup()
             sc_org = SecCfgV4(hwc, self.mtk, self.custom_sej_hw)
             sc_org.hwtype = "V4"
+            # create() needs real header values. Take them from the user's
+            # seccfg backup if present (first 0x1C bytes are plain dwords -
+            # no crypto needed, the hash is recomputed via the DA's SEJ
+            # anyway), else fall back to the known V4 defaults observed on
+            # this device (ver=4, size=0x3C).
+            sc_org.seccfg_ver = 4
+            sc_org.seccfg_size = 0x3C
+            sc_org.dm_verity_state = 0
+            sc_org.sboot_runtime = 0
+            import os as _os2
+            bk = _os2.environ.get("OPLUS_SECCFG_BACKUP",
+                                  "/home/musin/seccfg_backup.bin")
+            try:
+                if _os2.path.exists(bk) and _os2.path.getsize(bk) >= 0x1C:
+                    raw = open(bk, "rb").read(0x1C)
+                    _vals = unpack("<7I", raw)
+                    if _vals[0] == 0x4D4D4D4D and _vals[6] == 0x45454545:
+                        sc_org.seccfg_ver = _vals[1]
+                        sc_org.seccfg_size = _vals[2]
+                        sc_org.dm_verity_state = _vals[4]
+                        sc_org.sboot_runtime = _vals[5]
+                        self.info(f"seccfg header fields taken from backup: "
+                                  f"ver={_vals[1]} size={hex(_vals[2])} "
+                                  f"dm_verity={_vals[4]} sboot={_vals[5]}")
+            except OSError as _e:
+                self.warning(f"backup header read failed: {_e}")
             ret, writedata = sc_org.create(lockflag=lockflag)
             if ret is False:
                 return False, writedata
