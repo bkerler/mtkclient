@@ -937,6 +937,22 @@ class DAXML(metaclass=LogBase):
             # Re-enable with OPLUS_SBC_PATCH=1.
             self.info(f"get_hw_sbc patch skipped (set OPLUS_SBC_PATCH=1 to enable; target {hex(sbc)})")
 
+        # 4. WRITE policy bypass (OPLUS_WRITE_BYPASS=1). The OPLUS DA2 denies
+        #    writes to protected partitions ("Security deny for [seccfg]."):
+        #    the WRITE-PARTITION (0x40002034) and WRITE-FLASH (0x40002e60)
+        #    handlers load a deny flag byte from the parsed per-partition
+        #    policy struct and bail out when it is non-zero:
+        #      site1 0x400021a0: LDRB r0,[fp,#-0x8d]; CMP r0,#0; BEQ allow
+        #      site2 0x4000392c: LDRB r0,[sp,#3];     CMP r0,#0; BEQ allow
+        #    Forcing the flag byte to 0 makes the check always pass. (A third
+        #    site in WRITE-PARTITIONS 0x40002598 keys off a GLOBAL at
+        #    0x40054314, not the policy struct - not patched here.)
+        if _os.environ.get("OPLUS_WRITE_BYPASS", "0") == "1":
+            patches.append(("WRITE-PARTITION deny-check 0x400021a0 -> MOV R0,#0",
+                            0x400021a0, b"\x00\x00\xa0\xe3"))
+            patches.append(("WRITE-FLASH deny-check 0x4000392c -> MOV R0,#0",
+                            0x4000392c, b"\x00\x00\xa0\xe3"))
+
         if not patches:
             self.warning("No OPLUS runtime patch targets found in DA2")
             return
@@ -1488,10 +1504,15 @@ class DAXML(metaclass=LogBase):
             return False
         storage, parttype, rlength = partinfo
 
-        self.send_command(self.cmd.cmd_write_flash(partition=parttype, offset=addr, mem_length=length), noack=True)
+        _resp = self.send_command(self.cmd.cmd_write_flash(partition=parttype, offset=addr, mem_length=length), noack=True)
+        if _resp is not True:
+            # send_command returns the raw "ERR!..." string on DA errors -
+            # surface it, otherwise the failure reason is invisible
+            self.error(f"WRITE-FLASH rejected: {_resp!r}")
         cmd, fileopresult = self.get_command_result()
         if type(fileopresult) is FileSysOp:
             if fileopresult.key != "FILE-SIZE":
+                self.error(f"writeflash: unexpected FileSysOp key {fileopresult.key!r}")
                 return False
             self.ack_value(length)
             cmd, result = self.get_command_result()
@@ -1509,6 +1530,12 @@ class DAXML(metaclass=LogBase):
                 if fh:
                     fh.close()
                 return True
+            else:
+                self.error(f"writeflash: expected DwnFile after FILE-SIZE ack, got "
+                           f"cmd={cmd!r} result={result!r}")
+        else:
+            self.error(f"writeflash: no FILE-SYS-OPERATION ack, got cmd={cmd!r} "
+                       f"result={str(fileopresult)[:200]!r}")
         if fh:
             fh.close()
         return False
