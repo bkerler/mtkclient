@@ -542,6 +542,28 @@ class DaHandler(metaclass=LogBase):
             self.error("You need to gives as many filenames as given partitions.")
             self.close()
             exit(0)
+        # OPLUS (RMX3630): "w" uses WRITE-FLASH (UFS-LUA2+offset) which hangs
+        # and then ZEROES the target area on this DA. Use the WRITE-PARTITION
+        # command (by partition name) instead when OPLUS_WRITE_CMD asks for it.
+        import os as _os
+        if _os.environ.get("OPLUS_WRITE_CMD", "WRITE-PARTITION") == "WRITE-PARTITION" and \
+                b"OPLUS" in self.mtk.daloader.daconfig.da2:
+            for i, partition in enumerate(partitions):
+                partfilename = filenames[i]
+                res = self.mtk.daloader.detect_partition(partition, parttype)
+                if not res[0]:
+                    self.error(f"Error: Couldn't detect partition: {partition}")
+                    continue
+                rpartition = res[1]
+                self.info(f'Writing partition "{rpartition.name}" (WRITE-PARTITION)')
+                data = open(partfilename, "rb").read()
+                ok, msg = self.mtk.daloader.xmlft.seccfg_write_partition(
+                    rpartition, data)
+                if ok:
+                    print(f"Wrote {partfilename} to partition {rpartition.name}.")
+                else:
+                    print(f"Failed to write {partfilename} to partition {rpartition.name}: {msg}")
+            return
         if parttype == "user" or parttype is None:
             i = 0
             for partition in partitions:

@@ -1193,54 +1193,55 @@ class XmlFlashExt(metaclass=LogBase):
         addr = partition.sector * guid_gpt.sectorsize
         self.info(f"Writing seccfg ({len(writedata)}B) to LBA {partition.sector} "
                   f"(0x{addr:x}, sectorsize {guid_gpt.sectorsize})")
-        # OPLUS_WRITE_CMD: WRITE-FLASH (UFS-LUA2 + offset) passes through the
-        # WRITE-FLASH handler's TWO-flag deny and then hangs in the write
-        # engine on this OPLUS DA2 even with all deny checks NOPed. The
-        # WRITE-PARTITION path (handler 0x40002034, single byte-check at
-        # 0x400021a0 which OPLUS_WRITE_BYPASS already neutralizes) is the
-        # simpler route: partition by name, whole-partition data.
+        # WRITE-FLASH (UFS-LUA2 + offset) passes through the WRITE-FLASH
+        # handler's TWO-flag deny and then hangs in the write engine on this
+        # OPLUS DA2 even with all deny checks NOPed (and the hang ZEROES the
+        # target area!). WRITE-PARTITION by name is the safe route.
         import os as _os
         if _os.environ.get("OPLUS_WRITE_CMD", "WRITE-PARTITION") == "WRITE-PARTITION":
-            from mtkclient.Library.DA.xmlflash.xml_lib import FileSysOp, DwnFile
-            partname = partition.name
-            self.info(f"Using WRITE-PARTITION for partition '{partname}'")
-            # raw protocol: WRITE-PARTITION with the real partition NAME
-            # (bypasses get_storage()'s "Unknown parttype" mapping)
-            self.xflash.send_command(
-                self.xflash.cmd.cmd_write_partition(partition=partname,
-                                                    mem_length=len(writedata)), noack=True)
-            # The OPLUS DA2 verifies images: the first FILE-SYS-OPERATION may
-            # be key=EXISTS ("does <partition>.sig exist on the host?").
-            # Answer OK@0x0 (no sig) - the DA then proceeds (the deny checks
-            # are already patched); the next op is the usual FILE-SIZE.
-            for _op in range(4):
-                cmd, fileopresult = self.xflash.get_command_result()
-                if type(fileopresult) is not FileSysOp:
-                    break  # e.g. CMD:END error or DwnFile
-                self.info(f"writeflash(WRITE-PARTITION): FileSysOp key={fileopresult.key!r}")
-                if fileopresult.key == "EXISTS":
-                    self.xflash.ack_value(0)  # "OK@0x0\0" - sig file does not exist
-                    continue
-                if fileopresult.key == "FILE-SIZE":
-                    self.xflash.ack_value(len(writedata))
-                    cmd, result = self.xflash.get_command_result()
-                    if type(result) is not DwnFile:
-                        self.error(f"writeflash(WRITE-PARTITION): expected DwnFile, got "
-                                   f"cmd={cmd!r} result={str(result)[:200]!r}")
-                        return False, "Error on writing seccfg config to flash."
-                    if not self.xflash.upload(result, writedata, raw=True):
-                        self.error("Error on writing seccfg config to flash (upload).")
-                        return False, "Error on writing seccfg config to flash."
-                    return True, "Successfully wrote seccfg."
-                self.error(f"writeflash(WRITE-PARTITION): unexpected FileSysOp key {fileopresult.key!r}")
-                return False, "Error on writing seccfg config to flash."
-            self.error(f"writeflash(WRITE-PARTITION): no usable FileSysOp, got "
-                       f"cmd={cmd!r} result={str(fileopresult)[:200]!r}")
-            return False, "Error on writing seccfg config to flash."
+            ok, msg = self.seccfg_write_partition(partition, writedata)
+            if ok:
+                return True, "Successfully wrote seccfg."
+            return False, msg
         if self.xflash.writeflash(addr=addr,
                                   length=len(writedata),
                                   filename="", wdata=writedata, parttype="user", display=True):
             return True, "Successfully wrote seccfg."
+        return False, "Error on writing seccfg config to flash."
+
+    def seccfg_write_partition(self, partition, writedata: bytes):
+        """Write data to a partition by NAME via CMD:WRITE-PARTITION (raw
+        protocol, no get_storage mapping). Handles the OPLUS EXISTS (.sig)
+        verification query. Returns (ok, message)."""
+        from mtkclient.Library.DA.xmlflash.xml_lib import FileSysOp, DwnFile
+        partname = partition.name
+        self.info(f"Using WRITE-PARTITION for partition '{partname}'")
+        self.xflash.send_command(
+            self.xflash.cmd.cmd_write_partition(partition=partname,
+                                                mem_length=len(writedata)), noack=True)
+        for _op in range(4):
+            cmd, fileopresult = self.xflash.get_command_result()
+            if type(fileopresult) is not FileSysOp:
+                break  # e.g. CMD:END error or DwnFile
+            self.info(f"writeflash(WRITE-PARTITION): FileSysOp key={fileopresult.key!r}")
+            if fileopresult.key == "EXISTS":
+                self.xflash.ack_value(0)  # "OK@0x0\0" - sig file does not exist
+                continue
+            if fileopresult.key == "FILE-SIZE":
+                self.xflash.ack_value(len(writedata))
+                cmd, result = self.xflash.get_command_result()
+                if type(result) is not DwnFile:
+                    self.error(f"writeflash(WRITE-PARTITION): expected DwnFile, got "
+                               f"cmd={cmd!r} result={str(result)[:200]!r}")
+                    return False, "Error on writing seccfg config to flash."
+                if not self.xflash.upload(result, writedata, raw=True):
+                    self.error("Error on writing seccfg config to flash (upload).")
+                    return False, "Error on writing seccfg config to flash."
+                return True, "Successfully wrote seccfg."
+            self.error(f"writeflash(WRITE-PARTITION): unexpected FileSysOp key {fileopresult.key!r}")
+            return False, "Error on writing seccfg config to flash."
+        self.error(f"writeflash(WRITE-PARTITION): no usable FileSysOp, got "
+                   f"cmd={cmd!r} result={str(fileopresult)[:200]!r}")
         return False, "Error on writing seccfg config to flash."
 
     def decrypt_tee(self, filename="tee1.bin", aeskey1: bytes = None, aeskey2: bytes = None):
