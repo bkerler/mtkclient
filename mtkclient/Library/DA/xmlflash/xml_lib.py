@@ -635,6 +635,13 @@ class DAXML(metaclass=LogBase):
                     loaded = self.carbonara.patchda1_and_upload_da2()
                     if loaded:
                         self.mtk.daloader.patch = True
+                elif self.mtk.config.target_config["sbc"] and self.heapbait.is_da1_vulnerable():
+                    if self.heapbait.run_da1_exploit():
+                        da2 = self.xmlft.patch_da2(da2)
+                        self.heapbait.patch_da_hash(da2)
+                    loaded = self.boot_to(da2offset, da2)
+                    if loaded:
+                        self.mtk.daloader.patch = True
                 elif self.mtk.config.target_config["sbc"] and self.heapbait.is_vulnerable():
                     loaded = self.boot_to(da2offset, da2)
                     if self.heapbait.run_exploit():
@@ -680,12 +687,13 @@ class DAXML(metaclass=LogBase):
                                     return False
                             else:
                                 sla_signature = b"\x00" * 0x100
+                                self.handle_allinone_signature(display=False)
+                                self.dev_info = self.get_dev_info()
                                 if self.handle_sla(data=sla_signature):
                                     print("SLA Signature was accepted.")
                                     self.get_hw_info()
                                     # return True
                                 else:
-                                    self.dev_info = self.get_dev_info()
                                     sla_signature = generate_da_sla_signature(data=self.dev_info["rnd"], key=rsakey.key)
                                     if not self.handle_sla(data=sla_signature):
                                         print("SLA Key wasn't accepted.")
@@ -740,6 +748,12 @@ class DAXML(metaclass=LogBase):
                     else:
                         self.error("DA XML Extensions failed.")
                         self.daext = False
+                        # CMD:END
+                        self.get_response()
+                        self.ack()
+                        # CMD:START
+                        self.get_response()
+                        self.ack()
                 # parttbl = self.read_partition_table()
                 self.config.hwparam.writesetting("hwcode", hex(self.config.hwcode))
                 return True
@@ -876,9 +890,18 @@ class DAXML(metaclass=LogBase):
         return None
 
     def change_usb_speed(self):
-        resp = self.send_command(self.cmd.cmd_can_higher_usb_speed())
-        if not resp:
-            return False
+        result = self.send_command(self.cmd.cmd_can_higher_usb_speed())
+        if not hasattr(result, "target_file"):
+            return None
+        data = self.download(result)
+        scmd, sresult = self.get_command_result()
+        self.ack()
+        if sresult != "OK":
+            return None
+        tcmd, tresult = self.get_command_result()
+        if tresult != "START":
+            return None
+        return data
 
     def read_partition_table(self) -> tuple:
         self.send_command(self.cmd.cmd_read_partition_table(), noack=True)
@@ -974,7 +997,7 @@ class DAXML(metaclass=LogBase):
                 if len(data) % 512 != 0:
                     fill = 512 - (len(data) % 512)
                     data += fill*b"\x00"
-                if not self.upload(result, data, raw=True):
+                if not self.upload(result, data):
                     self.error("Error on writing flash at 0x%08X" % addr)
                     return False
                 if fh:
