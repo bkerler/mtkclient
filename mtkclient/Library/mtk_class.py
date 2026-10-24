@@ -169,7 +169,7 @@ class Mtk(metaclass=LogBase):
         if self.config.enforcecrash or self.config.meid is None or not self.config.is_brom:
             self.info("We're not in bootrom, trying to crash da...")
             if mode is None:
-                for crashmode in range(0, 3):
+                for crashmode in range(0, 4):
                     try:
                         plt.crash(crashmode)
                     except Exception:

@@ -8,6 +8,7 @@ from binascii import hexlify
 from mtkclient.Library.Exploit.amonet import Amonet
 from mtkclient.Library.Exploit.carbonara import Carbonara
 from mtkclient.Library.Exploit.hashimoto import Hashimoto
+from mtkclient.Library.exploit_handler import Exploitation
 from mtkclient.config.payloads import PathConfig
 from mtkclient.Library.gui_utils import LogBase, logsetup, progress
 from mtkclient.Library.Hardware.hwcrypto import CryptoSetup, HwCrypto
@@ -57,6 +58,8 @@ class PLTools(metaclass=LogBase):
             self.exploit = Hashimoto(mtk=self.mtk, loglevel=self.__logger.level)
         elif self.config.ptype == "carbonara":
             self.exploit = Carbonara(mtk=self.mtk, loglevel=self.__logger.level)
+        else:
+            self.exploit = Exploitation(mtk=self.mtk, loglevel=self.__logger.level)
 
         self.pathconfig = PathConfig()
         if loglevel == logging.DEBUG:
@@ -164,18 +167,20 @@ class PLTools(metaclass=LogBase):
         if type(self.exploit) is Kamakiri or type(self.exploit) is Kamakiri2:
             self.info("Kamakiri / DA Run")
             if self.runpayload(filename=pfilename, ack=0xC1C2C3C4, offset=0):
-                data, filename = self.exploit.dump_preloader()
-                return data, filename
+                data, rfilename = self.exploit.dump_preloader()
+                return data, rfilename
             else:
                 self.error(f"Error on sending payload: {pfilename}")
                 return None, None
         else:
-            if self.exploit.dump_brom(filename):
-                self.info(f"Preloader dumped as: {filename}")
-                return True
-            else:
-                self.error("Error on dumping preloader")
-        return False
+            result = self.exploit.dump_preloader()
+            if isinstance(result, tuple):
+                data, rfilename = result
+                if data:
+                    self.info("Preloader dumped successfully")
+                    return data, rfilename
+            self.error("Error on dumping preloader")
+            return None, None
 
     def run_crypto(self, data, iv, btype="sej", encrypt=True, otp=None):
         if data is None:
