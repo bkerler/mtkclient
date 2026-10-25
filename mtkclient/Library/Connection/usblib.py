@@ -193,10 +193,15 @@ class UsbClass(DeviceClass):
                 self.debug("Couldn't detect the device. Is it connected ?")
                 return False
             try:
-                self.device.set_configuration()
+                if self.device.get_active_configuration() is None:
+                    self.device.set_configuration()
             except Exception as err:
                 self.debug(str(err))
-                pass
+                try:
+                    self.device.set_configuration()
+                except Exception as err:
+                    self.debug(str(err))
+                    pass
             self.configuration = self.device.get_active_configuration()
             self.debug(2, self.configuration)
             return self.configuration.bNumInterfaces
