@@ -678,12 +678,12 @@ class Preloader(metaclass=LogBase):
             sbc = True if (target_config & 0x1) else False
             sla = True if (target_config & 0x2) else False
             daa = True if (target_config & 0x4) else False
-            swjtag = True if (target_config & 0x6) else False
-            epp = True if (target_config & 0x8) else False
-            cert = True if (target_config & 0x10) else False
-            memread = True if (target_config & 0x20) else False
-            memwrite = True if (target_config & 0x40) else False
-            cmd_c8 = True if (target_config & 0x80) else False
+            swjtag = True if (target_config & 0x8) else False
+            epp = True if (target_config & 0x10) else False
+            cert = True if (target_config & 0x20) else False
+            memread = True if (target_config & 0x40) else False
+            memwrite = True if (target_config & 0x80) else False
+            cmd_c8 = True if (target_config & 0x100) else False
             if display:
                 self.info(f"Target config:\t\t{hex(target_config)}")
                 self.info(f"\tSBC enabled:\t\t{sbc}")
