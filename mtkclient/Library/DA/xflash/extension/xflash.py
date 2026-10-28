@@ -78,6 +78,21 @@ class XFlashExt(metaclass=LogBase):
         self.da2 = None
         self.da2address = None
 
+    @staticmethod
+    def _read_ufs_hba_literal(data, return_offset):
+        """Read the UFS HBA literal following a Thumb function return.
+
+        Some DAs insert a 16-bit NOP to align the following 32-bit literal.
+        """
+        literal_offset = return_offset + 8
+        if literal_offset % 4 == 2 and data[literal_offset:literal_offset + 2] == b"\x00\xBF":
+            literal_offset += 2
+        if literal_offset % 4 != 0:
+            return None
+        if literal_offset + 4 > len(data):
+            return None
+        return int.from_bytes(data[literal_offset:literal_offset + 4], "little")
+
     def patch(self):
         self.da2 = self.xflash.daconfig.da2
         self.da2address = self.xflash.daconfig.da_loader.region[2].m_start_addr  # at_address
@@ -115,17 +130,20 @@ class XFlashExt(metaclass=LogBase):
             g_ufs_hba = None
             ptr_g_ufs_hba = find_binary(self.da2, b"\x20\x46\x0B\xB0\xBD\xE8\xF0\x83\x00\xBF")
             if ptr_g_ufs_hba is not None:
-                g_ufs_hba = int.from_bytes(self.da2[ptr_g_ufs_hba + 10:ptr_g_ufs_hba + 10 + 4], 'little')
+                g_ufs_hba = self._read_ufs_hba_literal(self.da2, ptr_g_ufs_hba)
             else:
                 # 6833 -> ufshcd_probe_hba
                 ptr_g_ufs_hba = find_binary(self.da2, b"\x20\x46\x0D\xB0\xBD\xE8\xF0\x83")
                 if ptr_g_ufs_hba is not None:
-                    g_ufs_hba = int.from_bytes(self.da2[ptr_g_ufs_hba + 8:ptr_g_ufs_hba + 8 + 4], 'little')
+                    g_ufs_hba = self._read_ufs_hba_literal(self.da2, ptr_g_ufs_hba)
                 else:
                     ptr_g_ufs_hba = find_binary(self.da2, b"\x21\x46\x02\xF0\x02\xFB\x1B\xE6\x00\xBF")
                     if ptr_g_ufs_hba is not None:
                         g_ufs_hba = int.from_bytes(self.da2[ptr_g_ufs_hba + 10 + 0x8:ptr_g_ufs_hba + 10 + 0x8 + 4],
                                                    'little')
+
+            if ptr_g_ufs_hba is not None and g_ufs_hba is None:
+                ptr_g_ufs_hba = None
 
             if ptr_g_ufs_hba is not None:
                 ufshcd_get_free_tag = find_binary(self.da2, b"\xB5.\xB1\x90\xF8")
