@@ -170,7 +170,20 @@ On Apple Silicon Macs, a few extra steps are needed beyond the generic macOS ins
    file -L "$(command -v python3)"   # should report arm64
    ```
 
+> [!TIP]
+> If you see:  
+> ```
+> USB CORE ERROR
+> [Errno 13] Access denied (insufficient permissions)
+> ```
+> the USB device could not be claimed.  
+> macOS has no udev equivalent, so run the command with `sudo`:
+> ```shell
+> sudo -E mtk_venv/bin/python mtk.py <args>
+> ```
+
 ---------------------------------------------------------------------------------------------------------------
+
 ### Use kamakiri (optional, only needed for mt6260 or older)
 
 - For linux (kamakiri attack), you need to recompile your linux kernel using this kernel patch :
