@@ -110,15 +110,15 @@ typedef struct _mxml_node_s mxml_node_t;
 
 typedef mxml_type_t (*mxml_load_cb_t)(mxml_node_t *);
 
-int (*dprintf)(const char *fmt, ...) = (void*)0x200251C;
-int (*_snprintf)(char *str, size_t len, const char *fmt, ...) = (void*)0x2005254;
-void (*register_major_command)(const char *str_id, const char *version, HHANDLE handle) = (void*)0x2003564;
-void (*set_error_msg)(const char *fmt, ...) = (void*)0x2003154;
-void (*clear_error_msg)() = (void*)0x2003114;
-mxml_node_t* (*mxmlLoadString)(mxml_node_t *top, const char *s, mxml_load_cb_t cb) = (void*)0x20875D0;
-mxml_node_t* (*mxmlFindPath)(mxml_node_t *top, const char *path) = (void*)0x2089300;
-char* (*mxml_escape)(const char *src, uint32_t len) = (void*)0x20843D8;
-void (*mxmlDelete)(mxml_node_t *node) = (void*)0x2088E48;
-void (*return_addr)(void) = (void*)0x2003620;
+int (*dprintf)(const char *fmt, ...) = (void*)0x1111111111111111;
+int (*_snprintf)(char *str, size_t len, const char *fmt, ...) = (void*)0x2222222222222222;
+void (*register_major_command)(const char *str_id, const char *version, HHANDLE handle) = (void*)0x3333333333333333;
+void (*set_error_msg)(const char *fmt, ...) = (void*)0x4444444444444444;
+void (*clear_error_msg)() = (void*)0x5555555555555555;
+mxml_node_t* (*mxmlLoadString)(mxml_node_t *top, const char *s, mxml_load_cb_t cb) = (void*)0x6666666666666666;
+mxml_node_t* (*mxmlFindPath)(mxml_node_t *top, const char *path) = (void*)0x7777777777777777;
+char* (*mxml_escape)(const char *src, uint32_t len) = (void*)0x8888888888888888;
+void (*mxmlDelete)(mxml_node_t *node) = (void*)0x9999999999999999;
+void (*return_addr)(void) = (void*)0xAAAAAAAAAAAAAAAA;
 
-struct free_heap_chunk* dpc_chunk = (void*)0x2101FF8;
+struct free_heap_chunk* dpc_chunk = (void*)0xBBBBBBBBBBBBBBBB;
