@@ -358,14 +358,15 @@ class UsbClass(DeviceClass):
             return False
         try:
             self.configuration = self.device.get_active_configuration()
-        except usb.core.USBError as e:
-            if e.strerror == "Configuration not set":
+        except (usb.core.USBError, NotImplementedError) as e:
+            if isinstance(e, usb.core.USBError) and e.strerror == "Configuration not set":
                 try:
                     self.device.set_configuration()
                     self.configuration = self.device.get_active_configuration()
                 except usb.core.USBError:
                     pass
-            if self.configuration is None and e.errno == 13:
+            if self.configuration is None and (isinstance(e, NotImplementedError) or e.errno == 13):
+                self.info("Trying fallback backend")
                 backend = self._get_fallback_backend()
                 if backend is not None:
                     try:
