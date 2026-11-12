@@ -116,7 +116,7 @@ class DaHandler(metaclass=LogBase):
         # while the port is still unclaimed so it can catch the plug-in
         # handshake; blocking here would skip it and break fresh sessions.
         mtk.port.wait_for_device(max_attempts=1, wait=False)
-        if mtk.port.cdc.connected is None or not mtk.port.cdc.connected or mtk.serialportname is not None:
+        if mtk.port.cdc.connected is None or not mtk.port.cdc.connected or mtk.serialportname is not None or not os.path.exists(os.path.join(mtk.config.hwparam_path, ".state")):
             mtk.preloader.init(directory=directory)
             if self.config.internal_flash and self.mtk.config.iot:
                 offset = self.mtk.offset
@@ -128,7 +128,7 @@ class DaHandler(metaclass=LogBase):
                 mtk.preloader.init()
             if directory:
                 self.mtk.config.hwparam_path = directory
-            if mtk.port.cdc.connected and os.path.exists(os.path.join(mtk.config.hwparam_path, ".state")):
+            if mtk.port.cdc.connected:
                 mtk.daloader.reinit()
                 mtk.reinited = True
                 return mtk
