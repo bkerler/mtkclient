@@ -1,8 +1,7 @@
 #include <stdint.h>
+#include <stddef.h>
 
 typedef int status_t;
-
-typedef uint64_t size_t;
 
 struct com_channel_struct {
     status_t (*read)(uint8_t *buffer, uint32_t *length);

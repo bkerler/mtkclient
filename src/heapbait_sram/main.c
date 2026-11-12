@@ -12,8 +12,8 @@
     } while (0)
 
 void safe_memcpy(void* dst, void* src, size_t len) {
-    uint32_t* _dst = (uint32_t*)((uint64_t)dst & ~3);
-    uint32_t* _src = (uint32_t*)((uint64_t)src & ~3);
+    uint32_t* _dst = (uint32_t*)((uintptr_t)dst & ~3);
+    uint32_t* _src = (uint32_t*)((uintptr_t)src & ~3);
     len >>= 2;
     while (len--) *_dst++ = *_src++;
 }
@@ -105,7 +105,7 @@ int cmd_read_memory(struct com_channel_struct* channel, const char* xml) {
         !(target_file = mxmlGetNodeText(tree, "da/arg/target_file"))) {
         CMD_FAIL("Required XML node path not found. Check command string.", 0xC0010001);
     }
-    void* addr = (void*)atoull(_addr);
+    void* addr = (void*)(uintptr_t)atoull(_addr);
     size_t size = atoull(_size);
     const char *cstr_cmd =
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
@@ -171,7 +171,7 @@ int cmd_write_memory(struct com_channel_struct* channel, const char* xml) {
         !(source_file = mxmlGetNodeText(tree, "da/arg/source_file"))) {
         CMD_FAIL("Required XML node path not found. Check command string.", 0xC0010001);
     }
-    void* addr = (void*)atoull(_addr);
+    void* addr = (void*)(uintptr_t)atoull(_addr);
     size_t size = atoull(_size);
     const char *cstr_cmd =
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
@@ -247,8 +247,8 @@ int cmd_execute_memory(struct com_channel_struct* channel, const char* xml) {
         !(_arg = mxmlGetNodeText(tree, "da/arg/argument"))) {
         CMD_FAIL("Required XML node path not found. Check command string.", 0xC0010001);
     }
-    status_t (*addr)(uint64_t) = (void*)atoull(_addr);
-    uint64_t arg = atoull(_arg);
+    status_t (*addr)(uintptr_t) = (void*)(uintptr_t)atoull(_addr);
+    uintptr_t arg = atoull(_arg);
     status = addr(arg);
     if (status) set_error_msg("Error in executing memory.");
 cmd_return:
@@ -256,13 +256,18 @@ cmd_return:
     return status;
 }
 
+#if defined(__arm__)
+__attribute__((target("arm")))
+#endif
 __attribute__((section(".text.start"))) void start() {
     dprintf("Hello world from sram@%x!", start);
     struct heap* theheap = (void*)dpc_chunk->node.next - __builtin_offsetof(struct heap, free_list);
     theheap->remaining -= dpc_chunk->len;
     dpc_chunk->node.prev->next = dpc_chunk->node.next;
     dpc_chunk->node.next->prev = dpc_chunk->node.prev;
-    memset(dpc_chunk, 0, sizeof(*dpc_chunk));
+    dpc_chunk->node.prev = 0;
+    dpc_chunk->node.next = 0;
+    dpc_chunk->len = 0;
     dprintf("theheap at 0x%x: base = 0x%x, len = 0x%x, remaining = 0x%x", theheap, theheap->base, theheap->len, theheap->remaining);
     register_major_command("CMD:READ-MEMORY", "1", cmd_read_memory);
     register_major_command("CMD:WRITE-MEMORY", "1", cmd_write_memory);
