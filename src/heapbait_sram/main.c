@@ -265,9 +265,7 @@ __attribute__((section(".text.start"))) void start() {
     theheap->remaining -= dpc_chunk->len;
     dpc_chunk->node.prev->next = dpc_chunk->node.next;
     dpc_chunk->node.next->prev = dpc_chunk->node.prev;
-    dpc_chunk->node.prev = 0;
-    dpc_chunk->node.next = 0;
-    dpc_chunk->len = 0;
+    memset(dpc_chunk, 0, sizeof(*dpc_chunk));
     dprintf("theheap at 0x%x: base = 0x%x, len = 0x%x, remaining = 0x%x", theheap, theheap->base, theheap->len, theheap->remaining);
     register_major_command("CMD:READ-MEMORY", "1", cmd_read_memory);
     register_major_command("CMD:WRITE-MEMORY", "1", cmd_write_memory);

@@ -12,8 +12,8 @@ OBJCOPY_arm := arm-none-eabi-objcopy
 
 SRCS := $(wildcard *.c)
 
-CFLAGS_arm64 := -std=gnu99 -Os -fno-stack-protector -fno-builtin-printf -fno-strict-aliasing -fno-builtin-memcpy -fPIE -Wall -Wextra -DNDEBUG
-CFLAGS_arm   := -std=gnu99 -Os -mthumb -mcpu=cortex-a9 -fno-builtin-printf -fno-strict-aliasing -fno-builtin-memcpy -fPIE -mno-unaligned-access -Wall -Wextra
+CFLAGS_arm64 := -std=gnu99 -Os -fno-stack-protector -fno-builtin-printf -fno-strict-aliasing -fno-builtin-memcpy -fPIE -Wall -Wextra
+CFLAGS_arm   := -std=gnu99 -Os -mthumb -mcpu=cortex-a9 -fno-builtin-printf -fno-strict-aliasing -fno-builtin-memcpy -fPIE -Wall -Wextra
 
 LDFLAGS := -nodefaultlibs -nostdlib -Wl,--build-id=none
 
