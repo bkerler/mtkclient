@@ -316,6 +316,7 @@ class Storage(metaclass=LogBase):
                 else:
                     parttype = "UFS-LUA3"
                     self.flashsize = self.ufs.lu3_size
+            else:
                 # NOTE: match the string first, THEN assign the enum.
                 # The previous code assigned UFSPartitionType.USER here, which
                 # shadowed the still-unmatched string, so every "lu0".."lu3"

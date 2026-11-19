@@ -1055,19 +1055,27 @@ class XmlFlashExt(metaclass=LogBase):
     def seccfg(self, lockflag, critical=False):
         if lockflag not in ["unlock", "lock"]:
             return False, "Valid flags are: unlock, lock"
-        data, guid_gpt = self.xflash.partition.get_gpt(self.mtk.config.gpt_settings, "user")
         seccfg_data = None
         partition = None
+        parttype = "user"
+        guid_gpt = None
+        for candidate_parttype in ("user", "lu2"):
+            data, guid_gpt = self.xflash.partition.get_gpt(self.mtk.config.gpt_settings, candidate_parttype)
+            if guid_gpt is None:
+                continue
+            for rpartition in guid_gpt.partentries:
+                if rpartition.name == "seccfg":
+                    partition = rpartition
+                    parttype = candidate_parttype
+                    seccfg_data = self.xflash.readflash(
+                        addr=partition.sector * guid_gpt.sectorsize,
+                        length=partition.sectors * guid_gpt.sectorsize,
+                        filename="", parttype=parttype, display=False)
+                    break
+            if seccfg_data is not None:
+                break
         if guid_gpt is None:
             return False, "Error getting the partition table."
-        for rpartition in guid_gpt.partentries:
-            if rpartition.name == "seccfg":
-                partition = rpartition
-                seccfg_data = self.xflash.readflash(
-                    addr=partition.sector * guid_gpt.sectorsize,
-                    length=partition.sectors * guid_gpt.sectorsize,
-                    filename="", parttype="user", display=False)
-                break
         if seccfg_data is None:
             return False, "Couldn't detect existing seccfg partition. Aborting unlock."
         if seccfg_data.find(b"\x4D\x4D\x4D\x4D") == -1:
@@ -1101,9 +1109,11 @@ class XmlFlashExt(metaclass=LogBase):
             ret, writedata = sc_org.create(lockflag=lockflag)
         if ret is False:
             return False, writedata
-        if self.xflash.writeflash(addr=partition.sector * self.mtk.daloader.daconfig.pagesize,
+        if len(writedata) % guid_gpt.sectorsize != 0:
+            writedata += b"\x00" * (guid_gpt.sectorsize - (len(writedata) % guid_gpt.sectorsize))
+        if self.xflash.writeflash(addr=partition.sector * guid_gpt.sectorsize,
                                   length=len(writedata),
-                                  filename="", wdata=writedata, parttype="user", display=True):
+                                  filename="", wdata=writedata, parttype=parttype, display=True):
             return True, "Successfully wrote seccfg."
         return False, "Error on writing seccfg config to flash."
 
