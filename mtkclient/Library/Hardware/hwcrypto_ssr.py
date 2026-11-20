@@ -717,7 +717,7 @@ class SSRCrypto(metaclass=LogBase):
             wc = words
             staging[(wc * 4) - len(data):(wc * 4)] = data
         else:
-            wc = len(data) + 3 // 4
+            wc = (len(data) + 3) // 4
             staging[:len(data)] = data
         for i in range(wc):
             self.write32(dst + i * 4, self._bswap32(staging[wc - 1 - i]))
@@ -788,7 +788,7 @@ class SSRCrypto(metaclass=LogBase):
             return SSR_KDF_ERROR.HW_UNKNOWN
         out = []
         for n in range(derive_len // 4):
-            out = self._bswap32(self.kdf.SSR_KDF_HKDF_OUT0.addr + 4)
+            out.append(self._bswap32(self.read32(self.kdf.SSR_KDF_HKDF_OUT0.addr + n * 4)).to_bytes(4, "little"))
         return b"".join(out)
 
     def ssr_kdf_kbkdf_cmac_counter(
@@ -1002,12 +1002,12 @@ class SSR_PKA(SSRCrypto):
         self.paddr = 0x69000000
 
     def pka_write(self, base:int, data:list, nwords:int):
-        for i in range(nwords-1,0,-1):
+        for i in range(nwords-1,-1,-1):
             self.write32(base+(i*4),self._bswap32(data[i]))
 
     def pka_read(self, base, nwords:int):
         dst = []
-        for i in range(nwords-1,0,-1):
+        for i in range(nwords-1,-1,-1):
             dst.append(self._bswap32(self.read32(base+(i*4))))
         return dst
 
@@ -1032,20 +1032,20 @@ class SSR_PKA(SSRCrypto):
         return result
 
     def pka_ecc_push_operant(self, fifo:int, src:list, nwords:int):
-        for i in range(nwords-1,0,-1):
+        for i in range(nwords-1,-1,-1):
             self.write32(fifo, self._bswap32(src[i]))
         for i in range(13):
             self.write32(fifo,0)
 
     def pka_ecc_push_domain(self, table:list, word_count:int):
-        for i in range(word_count-1,0,-1):
+        for i in range(word_count-1,-1,-1):
             self.write32(self.pka.SSR_PKA_ECC_DOM_FIFO, self._bswap32(table[i]))
         for i in range(19):
             self.write32(self.pka.SSR_PKA_ECC_DOM_FIFO, 0)
 
     def pka_ecc_pop_operand(self, fifo:int, nwords:int):
         dst = []
-        for i in range(nwords-1,0,-1):
+        for i in range(nwords-1,-1,-1):
             dst.append(self._bswap32(self.read32(fifo)))
         return dst
 
