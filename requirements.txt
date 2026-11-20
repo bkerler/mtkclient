@@ -11,6 +11,5 @@ flake8
 keystone-engine
 capstone
 unicorn
-keystone
 mfusepy
 
