@@ -46,6 +46,13 @@ class DAloader(metaclass=LogBase):
         self.da = None
         self.flashmode = None
 
+    @staticmethod
+    def _get_state_bytes(config, key):
+        value = config.get(key)
+        if value is None:
+            return None
+        return bytes.fromhex(value)
+
     def writestate(self):
         config = {}
         if self.mtk.config.chipconfig.damode == DAmodes.LEGACY:
@@ -159,8 +166,9 @@ class DAloader(metaclass=LogBase):
             config = json.loads(open(os.path.join(self.mtk.config.hwparam_path, ".state"), "r").read())
             self.config.hwcode = config["hwcode"]
             meid_val = None
-            if hasattr(config, 'meid') and config.meid is not None:
-                self.config.meid = bytes.fromhex(config["meid"])
+            meid = self._get_state_bytes(config, "meid")
+            if meid is not None:
+                self.config.meid = meid
                 meid_val = self.config.meid.hex()
             if "socid" in config:
                 self.config.socid = bytes.fromhex(config["socid"])
