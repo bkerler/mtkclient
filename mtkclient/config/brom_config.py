@@ -2179,6 +2179,7 @@ hwconfig = {
         # prov_addr=0x1066C0,
         damode=DAmodes.XML,
         dacode=0x1357,
+        has64bit=True,
         name="MT6991",
         description="Dimensity 9400 Ultra"
     ),
