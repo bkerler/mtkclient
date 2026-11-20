@@ -807,9 +807,10 @@ class DAXML(metaclass=LogBase):
                 storagetype = get_field(data, "storage")
                 self.daconfig.storage.storagetype = storagetype
                 if storagetype == "UFS":
-                    self.config.pagesize = 4096
                     self.daconfig.storage.flashtype = "ufs"
                     self.daconfig.storage.ufs.block_size = int(get_field(data, "block_size"), 16)
+                    self.config.pagesize = self.daconfig.storage.ufs.block_size
+                    self.daconfig.pagesize = self.daconfig.storage.ufs.block_size
                     self.daconfig.storage.ufs.lu0_size = int(get_field(data, "lua0_size"), 16)
                     self.daconfig.storage.ufs.lu1_size = int(get_field(data, "lua1_size"), 16)
                     self.daconfig.storage.ufs.lu2_size = int(get_field(data, "lua2_size"), 16)
