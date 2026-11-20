@@ -703,7 +703,12 @@ class DAXML(metaclass=LogBase):
             self.reinit(True)
             self.check_lifecycle()
             if self.mtk.daloader.patch:
-                xdata = self.xmlft.patch()
+                try:
+                    xdata = self.xmlft.patch()
+                except Exception as e:
+                    # vendor DA2 the extension patcher can't pattern-match; fall back to stock DA2 commands
+                    self.info(f"DA XML extension patch failed ({type(e).__name__}: {e}); continuing with stock DA2")
+                    xdata = None
                 """
                 i=0
                 val=self.read_register(0x4006E4C0)
@@ -712,7 +717,7 @@ class DAXML(metaclass=LogBase):
                     i+=4
                 """
                 xmlcmd = self.cmd.create_cmd("CUSTOM")
-                if self.xsend(xmlcmd):
+                if xdata is not None and self.xsend(xmlcmd):
                     # result =
                     data = self.get_response()
                     if data == 'OK':
@@ -849,7 +854,7 @@ class DAXML(metaclass=LogBase):
                                     0x10,                                                 , 1
         """
         data = self.get_sys_property(key="DA.SLA", length=0x200000)
-        if data is None:
+        if data is None or data is False:
             return False
         data = data.decode('utf-8')
         if "item key=" in data:
@@ -861,7 +866,9 @@ class DAXML(metaclass=LogBase):
         return data
 
     def get_sys_property(self, key: str = "DA.SLA", length: int = 0x200000):
-        self.send_command(self.cmd.cmd_get_sys_property(key=key, length=length), noack=True)
+        if self.send_command(self.cmd.cmd_get_sys_property(key=key, length=length), noack=True) is not True:
+            # DA answered ERR!UNSUPPORTED (send_command already drained END/START)
+            return None
         cmd, result = self.get_command_result()
         if type(result) is not UpFile:
             return False
