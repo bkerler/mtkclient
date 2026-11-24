@@ -183,14 +183,17 @@ class XMLCmd(metaclass=LogBase):
         """
         return cmd
 
-    def cmd_dram_repair(self, mem_offset: int = 0x10000, mem_length: int = 0x1000):
+    def cmd_dram_repair(self, mem_offset: int = 0x10000, mem_length: int = 0x1000,
+                        param_file: str = "D:/dram.info"):
         content = {
             "arg": [
-                "<param_file>D:/dram.info</param_file>",
-                f"<target_file>MEM://{mem_offset}:{mem_length}</target_file>"
+                f"<param_file>{param_file}</param_file>",
+                # SPFT MEM:// URIs use hex (MEM://0x10000:0x1000)
+                f"<target_file>MEM://{hex(mem_offset)}:{hex(mem_length)}</target_file>"
             ]
         }
-        cmd = self.create_cmd("DRAM-REPAIR", content)
+        # SPFT V6 flash.dll sends the debug-prefixed command: CMD:DEBUG:DRAM-REPAIR
+        cmd = self.create_cmd("DEBUG:DRAM-REPAIR", content)
         # INFO Result: SUCCEEDED, NO-NEED, FAILED
         return cmd
 

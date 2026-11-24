@@ -1246,6 +1246,39 @@ class XmlFlashExt(metaclass=LogBase):
             return data
         return None
 
+    def ram_test(self, function: str = "FLIP", start_address: int = 0x4000000,
+                 length: int = 0x100000, repeat: int = 0xA) -> str:
+        """
+        CMD:RAM-TEST (SPFT V6 flash.dll, see MemoryTestCommand): DRAM flip test or
+        calibration. DA answers with CMD:UPLOAD-FILE progress ("RAM test." /
+        "Interface diag") and a final result string.
+        """
+        xmlcmd = self.xflash.cmd.cmd_ram_test(function=function, start_address=start_address,
+                                              length=length, repeat=repeat)
+        self.info(f"Running RAM test ({function}) on {hex(start_address)}.."
+                  f"{hex(start_address + length)}")
+        result = self.xflash.send_command(xmlcmd)
+        self.info(f"RAM test result: {result}")
+        return result
+
+    def dram_repair(self, param_file: str = "D:/dram.info", mem_offset: int = 0x10000,
+                    mem_length: int = 0x1000) -> str:
+        """
+        CMD:DEBUG:DRAM-REPAIR (SPFT V6): apply DRAM repair parameters from a
+        dram.info param file. Result: SUCCEEDED, NO-NEED or FAILED.
+        """
+        if param_file == "D:/dram.info":
+            param_file = os.path.join(self.pathconfig.get_payloads_path(), "dram.info")
+        if not os.path.exists(param_file):
+            self.error(f"DRAM repair param file {param_file} doesn't exist.")
+            return "FAILED"
+        xmlcmd = self.xflash.cmd.cmd_dram_repair(mem_offset=mem_offset, mem_length=mem_length,
+                                                 param_file=param_file)
+        self.info(f"Running DRAM repair using {param_file}")
+        result = self.xflash.send_command(xmlcmd)
+        self.info(f"DRAM repair result: {result}")
+        return result
+
     def readfuses(self):
         if self.mtk.config.chipconfig.efuse_addr is not None:
             base = self.mtk.config.chipconfig.efuse_addr

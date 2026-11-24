@@ -495,6 +495,22 @@ class DAloader(metaclass=LogBase):
                                                  seed=seed,
                                                  aeskey=aeskey)
 
+    def ram_test(self, function: str = "FLIP", start_address: int = 0x4000000,
+                 length: int = 0x100000, repeat: int = 0xA):
+        if self.flashmode == DAmodes.XML:
+            return self.xmlft.ram_test(function=function, start_address=start_address,
+                                       length=length, repeat=repeat)
+        self.error("Device is not in xml mode, cannot run ram test cmd.")
+        return False
+
+    def dram_repair(self, param_file: str = "D:/dram.info", mem_offset: int = 0x10000,
+                    mem_length: int = 0x1000):
+        if self.flashmode == DAmodes.XML:
+            return self.xmlft.dram_repair(param_file=param_file, mem_offset=mem_offset,
+                                          mem_length=mem_length)
+        self.error("Device is not in xml mode, cannot run dram repair cmd.")
+        return False
+
     def str_to_int(self, arg):
         if arg is not None:
             if "0x" in arg:

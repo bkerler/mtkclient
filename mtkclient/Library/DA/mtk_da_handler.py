@@ -1400,7 +1400,7 @@ class DaHandler(metaclass=LogBase):
             subcmd = args.subcmd
             if subcmd is None:
                 print(
-                    "Available da cmds are: [peek, poke, generatekeys, seccfg, rpmb, meta, memdump, efuse, dumpbrom, vbmeta]")
+                    "Available da cmds are: [peek, poke, generatekeys, seccfg, rpmb, meta, memdump, efuse, dumpbrom, vbmeta, ramtest, dram-repair]")
                 return
             if subcmd == "peek":
                 addr = getint(args.address)
@@ -1615,4 +1615,15 @@ class DaHandler(metaclass=LogBase):
             elif subcmd == "vbmeta":
                 vbmode = int(args.vbmode)
                 self.da_vbmeta(vbmode=vbmode)
+            elif subcmd == "ramtest":
+                # SPFT V6 CMD:RAM-TEST (MemoryTestCommand), xml DA only
+                mtk.daloader.ram_test(function=args.function,
+                                      start_address=getint(args.addr),
+                                      length=getint(args.length),
+                                      repeat=getint(args.repeat))
+            elif subcmd == "dram-repair":
+                # SPFT V6 CMD:DEBUG:DRAM-REPAIR, xml DA only
+                mtk.daloader.dram_repair(param_file=args.file,
+                                         mem_offset=getint(args.offset),
+                                         mem_length=getint(args.length))
 
