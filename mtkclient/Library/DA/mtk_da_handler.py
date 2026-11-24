@@ -1400,7 +1400,7 @@ class DaHandler(metaclass=LogBase):
             subcmd = args.subcmd
             if subcmd is None:
                 print(
-                    "Available da cmds are: [peek, poke, generatekeys, seccfg, rpmb, meta, memdump, efuse, dumpbrom, vbmeta, ramtest, dram-repair]")
+                    "Available da cmds are: [peek, poke, generatekeys, seccfg, rpmb, meta, memdump, efuse, dumpbrom, vbmeta, ramtest, dram-repair, cert]")
                 return
             if subcmd == "peek":
                 addr = getint(args.address)
@@ -1626,4 +1626,8 @@ class DaHandler(metaclass=LogBase):
                 mtk.daloader.dram_repair(param_file=args.file,
                                          mem_offset=getint(args.offset),
                                          mem_length=getint(args.length))
+            elif subcmd == "cert":
+                # SPFT V6 CMD:WRITE-PRIVATE-CERT, xml DA only
+                if args.cert_subcmd == "download":
+                    mtk.daloader.write_private_cert(args.filename)
 

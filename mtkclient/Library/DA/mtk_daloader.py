@@ -511,6 +511,13 @@ class DAloader(metaclass=LogBase):
         self.error("Device is not in xml mode, cannot run dram repair cmd.")
         return False
 
+    def write_private_cert(self, cert_file: str = "cert.bin"):
+        # SPFT V6 CMD:WRITE-PRIVATE-CERT, xml DA only
+        if self.flashmode == DAmodes.XML:
+            return self.xmlft.write_private_cert(cert_file=cert_file)
+        self.error("Device is not in xml mode, cannot write private cert.")
+        return False
+
     def str_to_int(self, arg):
         if arg is not None:
             if "0x" in arg:

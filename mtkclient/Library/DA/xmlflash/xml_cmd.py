@@ -1,4 +1,6 @@
 import datetime
+import os
+
 from mtkclient.Library.gui_utils import LogBase
 
 
@@ -551,10 +553,13 @@ class XMLCmd(metaclass=LogBase):
         cmd = self.create_cmd("SET-RSC", content)
         return cmd
 
-    def cmd_write_private_cert(self):
+    def cmd_write_private_cert(self, cert_file: str = "cert.bin"):
+        # SPFT V6 console_mode.xsd WRITE-PRIVATE-CERT: the host uploads the
+        # cert file into the DA local storage (ms-appdata:///local/), the DA
+        # then fetches it via DOWNLOAD-FILE (same flow as cmd_write_efuse).
         content = {
             "arg": [
-                "<source_file>ms-appdata:///local/cert.bin</source_file>"
+                f"<source_file>ms-appdata:///local/{os.path.basename(cert_file)}</source_file>"
             ]
         }
         cmd = self.create_cmd("WRITE-PRIVATE-CERT", content)

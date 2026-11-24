@@ -1279,6 +1279,21 @@ class XmlFlashExt(metaclass=LogBase):
         self.info(f"DRAM repair result: {result}")
         return result
 
+    def write_private_cert(self, cert_file: str = "cert.bin") -> str:
+        """
+        CMD:WRITE-PRIVATE-CERT (SPFT V6): send a private cert file to the DA
+        (V5 heritage: FlashTool_DownloadCert / SCERT download, Ctrl+C hotkey).
+        The DA fetches the file from its local storage via DOWNLOAD-FILE.
+        """
+        if not os.path.exists(cert_file):
+            self.error(f"Cert file {cert_file} doesn't exist.")
+            return "FAILED"
+        xmlcmd = self.xflash.cmd.cmd_write_private_cert(cert_file=cert_file)
+        self.info(f"Writing private cert from {cert_file}")
+        result = self.xflash.send_command(xmlcmd)
+        self.info(f"Write private cert result: {result}")
+        return result
+
     def readfuses(self):
         if self.mtk.config.chipconfig.efuse_addr is not None:
             base = self.mtk.config.chipconfig.efuse_addr
