@@ -101,6 +101,7 @@ class DAXML(metaclass=LogBase):
         self.rdword = self.mtk.port.rdword
         self.rword = self.mtk.port.rword
         self.daconfig = daconfig
+        self.chksum_rule = None  # optional ChksumRule (Library.chksum), see verify_image_chksum
         self.partition = Partition(self.mtk, self.readflash, self.read_partition_table, loglevel)
         self.pathconfig = PathConfig()
         self.generatekeys = self.mtk.config.generatekeys
@@ -948,6 +949,27 @@ class DAXML(metaclass=LogBase):
             self.error("Read flash isn't supported")
             sys.exit(1)
 
+    def set_chksum_rule(self, rule) -> None:
+        """
+        Install a ChksumRule (Library.chksum) used by the write path to verify
+        load images before upload (SPFT V6 imageChksumVerify). None disables
+        the verification.
+        """
+        self.chksum_rule = rule
+
+    def verify_image_chksum(self, filename: str, data) -> bool:
+        """
+        SPFT V6 write-path checksum hook (ConsoleMode::ConsoleModeRunner::
+        imageChksumVerify, "Begin verify load images checksum"). Verifies the
+        raw image bytes against the installed ChksumRule; images without a
+        rule entry are skipped ("skip chksum for rom(%s)."). Returns False on
+        checksum mismatch ("image checksum mismatch").
+        """
+        rule = getattr(self, "chksum_rule", None)
+        if rule is None or not filename:
+            return True
+        return rule.verify_image(os.path.basename(filename), data)
+
     def writeflash(self, addr, length, filename, offset=0, parttype=None, wdata=None, display=True):
         fh = None
         if filename != "":
@@ -979,6 +1001,14 @@ class DAXML(metaclass=LogBase):
                     data = fh.read(length)
                 else:
                     data = wdata
+                # SPFT V6 imageChksumVerify: verify the load image checksum
+                # before anything leaves the host (FT_FLASHTOOL_ERROR_CHKSUM_FAIL)
+                if not self.verify_image_chksum(filename, data):
+                    self.error("Image checksum verification failed, aborting "
+                               f"flash write at 0x{addr:08X}.")
+                    if fh:
+                        fh.close()
+                    return False
                 if len(data) % 512 != 0:
                     fill = 512 - (len(data) % 512)
                     data += fill*b"\x00"
