@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 # (c) B.Kerler 2018-2025 GPLv3 License
+import errno
 import logging
 import os
 import sys
@@ -21,6 +22,36 @@ from ctypes import c_void_p, c_int
 from mtkclient.Library.DA.xmlflash.xml_param import max_xml_data_length
 from mtkclient.Library.utils import write_object
 from mtkclient.Library.Connection.devicehandler import DeviceClass
+
+USB_RESET_MID_TRANSFER_MSG = "USB reset mid-transfer (kamakiri crash) — retry expected"
+
+
+class UsbResetMidTransferError(Exception):
+    """libusb EACCES (errno 13 / LIBUSB_ERROR_ACCESS) surfaced, not swallowed.
+
+    On macOS libusb maps kIOReturnExclusiveAccess to LIBUSB_ERROR_ACCESS
+    (errno 13); in the kamakiri flow this marks the USB device instance
+    resetting mid-transfer (the exploit crashed the preloader and the BROM
+    port re-enumerates). Raised as a dedicated class (NOT a usb.core.USBError
+    subclass) so the upper retry loop can distinguish the expected
+    reset-mid-transfer condition from a plain permissions problem."""
+
+    def __init__(self, usb_error, operation=""):
+        self.usb_error = usb_error
+        self.errno = getattr(usb_error, "errno", None)
+        self.operation = operation
+        detail = f" during {operation}" if operation else ""
+        super().__init__(f"{USB_RESET_MID_TRANSFER_MSG}{detail}: {usb_error}")
+
+
+def raise_if_usb_access_denied(err, operation=""):
+    """Re-raise a libusb EACCES (errno 13) as UsbResetMidTransferError.
+
+    Any other error is returned untouched so callers keep their existing
+    handling for non-EACCES failures."""
+    if isinstance(err, usb.core.USBError) and err.errno == errno.EACCES:
+        raise UsbResetMidTransferError(err, operation) from err
+    return err
 
 USB_DIR_OUT = 0  # to device
 USB_DIR_IN = 0x80  # to host
@@ -416,8 +447,15 @@ class UsbClass(DeviceClass):
                 self.debug(f"No kernel driver supported: {str(err)}")
             try:
                 usb.util.claim_interface(self.device, 0)
-            except Exception:
-                pass
+            except usb.core.USBError as err:
+                # EACCES (errno 13) on claim must not be swallowed: on macOS it
+                # marks the re-enumerated BROM instance after a kamakiri crash
+                # (kIOReturnExclusiveAccess -> LIBUSB_ERROR_ACCESS). Surface it
+                # so the retry loop reconnects instead of running with an
+                # unclaimed interface.
+                raise_if_usb_access_denied(err, f"claim_interface(0) on vid={self.vid} pid={self.pid}")
+            except Exception as err:
+                self.debug(f"claim_interface(0) failed (non-USBError): {str(err)}")
 
             self.debug(self.configuration)
             try:
