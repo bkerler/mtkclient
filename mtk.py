@@ -310,6 +310,7 @@ def main():
     da_poke = da_subs.add_parser("poke", parents=[base], help="Write memory")
     da_poke.add_argument('address', type=str, help="Address to read from (hex value)")
     da_poke.add_argument('data', type=str, help="Data to write")
+    da_poke.add_argument('--filename', type=str, help="Load from file (optional)")
 
     da_unlock = da_subs.add_parser("seccfg", parents=[base], help="Unlock device / Configure seccfg")
     da_unlock.add_argument('flag', type=str, help="Needed flag (unlock,lock)")
