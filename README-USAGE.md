@@ -307,6 +307,21 @@ Unlock / Lock bootloader
 python mtk.py da seccfg [lock or unlock]
 ```
 
+RAM / DRAM test (xml DA)
+```shell
+python mtk.py da ramtest [FLIP or CALIBRATION] [--addr 0x4000000] [--length 0x100000] [--repeat 0xA]
+```
+
+DRAM repair using a dram.info parameter file (xml DA)
+```shell
+python mtk.py da dram-repair --file dram.info [--offset 0x10000] [--length 0x1000]
+```
+
+Download a private cert (xml DA)
+```shell
+python mtk.py da cert download cert_file.cert
+```
+
 ---------------------------------------------------------------------------------------------------------------
 
 ### Bypass SLA, DAA and SBC (using generic_patcher_payload)

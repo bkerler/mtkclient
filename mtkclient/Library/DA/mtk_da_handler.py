@@ -1400,7 +1400,8 @@ class DaHandler(metaclass=LogBase):
             subcmd = args.subcmd
             if subcmd is None:
                 print(
-                    "Available da cmds are: [peek, poke, generatekeys, seccfg, rpmb, meta, memdump, efuse, dumpbrom, vbmeta, ramtest, dram-repair, cert]")
+                    "Available da cmds are: [peek, poke, generatekeys, seccfg, rpmb, meta, "
+                    "memdump, efuse, dumpbrom, vbmeta, ramtest, dram-repair, cert]")
                 return
             if subcmd == "peek":
                 addr = getint(args.address)

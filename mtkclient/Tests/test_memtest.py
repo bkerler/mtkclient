@@ -200,12 +200,6 @@ class TestMemoryTestFlow(unittest.TestCase):
         port = FakePort(words=[0x40001000, RESULT_OK])
         cmd = MemoryTestCommand(FakeMtk(port))
         cmd.notify_stop = lambda: None
-        # stop after first progress word
-        orig_exec = cmd.exec
-
-        def stop_after_first_progress():
-            # simulate: after sending args, request stop
-            pass
         ok, message = cmd.exec(MemTestArg(), display=False)
         # direct stop() call sends the stop flag word
         cmd.stop()

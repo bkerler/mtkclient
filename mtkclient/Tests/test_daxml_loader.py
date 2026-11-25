@@ -3,7 +3,6 @@
 # Unit tests for the SPFT V6 flash.xml loader (Library/DAXML/loader.py),
 # parsed per the official console_mode.xsd (SP_Flash_Tool_V6.2404_Win) and
 # mapped 1:1 onto the existing XMLCmd methods. No device is touched.
-import os
 import unittest
 
 from mtkclient.Library.DA.xmlflash.xml_cmd import XMLCmd

@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-import mtkclient.Library.utils  # noqa: F401  (triggers the stdio rewrap up front)
+import mtkclient.Library.utils  # noqa: E402,F401  (triggers the stdio rewrap up front)
 
 
 def main():

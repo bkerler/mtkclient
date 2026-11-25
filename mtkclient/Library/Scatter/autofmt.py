@@ -18,7 +18,6 @@
 #
 # The computed range feeds the existing mtkclient DAloader.formatflash(addr,
 # length, partitionname, parttype) call.
-import os
 
 
 class AutoFormatFlag:

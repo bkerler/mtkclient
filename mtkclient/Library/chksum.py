@@ -92,7 +92,7 @@ def VerifyImageChksum(image_name: str, data: bytes, expected: int,
 
 class ChksumRule(metaclass=LogBase):
     """
-    Per-image checksum map (flash_tool Rules\ChksumRule.cpp).
+    Per-image checksum map (flash_tool Rules\\ChksumRule.cpp).
 
     IniChksumMap() loads "Checksum.ini" - an INI whose keys are image file
     names (case-insensitive) and whose values are 32-bit checksums (hex or
