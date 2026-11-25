@@ -143,7 +143,7 @@ class DAXFlash(metaclass=LogBase):
             return -1
         tmp = self.usbread(length)
         if len(tmp) < length:
-            self.error(f"Status length error: Too few data {hex(len(hdr))}")
+            self.error(f"Status length error: Too few data {hex(len(tmp))}")
             return -1
         if length == 2:
             status = unpack("<H", tmp)[0]

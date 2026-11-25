@@ -193,7 +193,7 @@ class DAconfig(metaclass=LogBase):
                             found = False
                             if da.hw_version == ldr.hw_version:
                                 if da.sw_version == ldr.sw_version:
-                                    if da.hw_sub_code == da.hw_sub_code:
+                                    if da.hw_sub_code == ldr.hw_sub_code:
                                         found = True
                                         break
                         if not found:
