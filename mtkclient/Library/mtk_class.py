@@ -3,6 +3,7 @@
 # Licensed under GPLv3 License
 import os
 import logging
+import time
 from struct import unpack
 from mtkclient.config.usb_ids import default_ids
 from mtkclient.config.payloads import PathConfig
@@ -142,6 +143,39 @@ class Mtk(metaclass=LogBase):
             daaddr = self.config.chipconfig.da_payload_addr
             dadata = data
         return daaddr, dadata
+
+    def boot_preloader(self, preloader_filename, timeout_s=2):
+        """
+        Send a user-supplied preloader to the device and re-initialize on the
+        new preloader session. Returns a fresh Mtk connected to the preloader,
+        or None on failure. Reuses self.config to preserve config.loader.
+        """
+        if not os.path.exists(preloader_filename):
+            self.error(f"Preloader file not found: {preloader_filename}")
+            return None
+        # init() is needed the first time to populate EP_IN/EP_OUT via the
+        # USB handshake; skip if already done to avoid a redundant reopen.
+        if not self.port.cdc.connected:
+            if not self.preloader.init():
+                self.error("boot_preloader: preloader.init() failed (no device / handshake)")
+                return None
+        daaddr, dadata = self.parse_preloader(preloader_filename)
+        if not self.preloader.send_da(daaddr, len(dadata), 0x100, dadata):
+            self.error("Failed to send preloader via send_da")
+            return None
+        self.info(f"Sent preloader to {hex(daaddr)}, length {hex(len(dadata))}")
+        if not self.preloader.jump_da(daaddr):
+            self.error("Failed to jump to preloader")
+            return None
+        self.info(f"Jumped to pl {hex(daaddr)}.")
+        time.sleep(timeout_s)
+        new_mtk = Mtk(loglevel=self.__logger.level, config=self.config,
+                      serialportname=self.port.serialportname)
+        if not new_mtk.preloader.init():
+            self.error("Error on loading preloader after jump")
+            return None
+        self.info("Successfully connected to pl.")
+        return new_mtk
 
     def setup(self, vid=None, pid=None, interface=None, serialportname: str = None):
         if vid is None:
