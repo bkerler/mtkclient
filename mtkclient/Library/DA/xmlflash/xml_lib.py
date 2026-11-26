@@ -198,6 +198,18 @@ class DAXML(metaclass=LogBase):
                                                                    initialize_dram=True))
         return res
 
+    def finish_failed_command(self):
+        """After a CMD:END with result != OK, complete the handshake the DA still expects:
+        ack the CMD:END, then read (and ack) the CMD:START that follows. Without this the
+        DA is left waiting for an ack and every later command desyncs (xread: Wrong length),
+        which stranded a Fibocom FM350-GL in DA mode after each refused read."""
+        self.ack()
+        scmd, _ = self.get_command_result()
+        if scmd != "CMD:START":
+            self.warning(f"finish_failed_command: expected CMD:START, got {scmd!r}")
+            return False
+        return True
+
     def send_command(self, xmldata, noack: bool = False):
         if self.xsend(data=xmldata):
             result = self.get_response()
@@ -208,6 +220,7 @@ class DAXML(metaclass=LogBase):
                 if cmd == "CMD:END":
                     if result!="OK":
                         self.error(result)
+                        self.finish_failed_command()
                         return False
                     self.ack()
                     if result == '2nd DA address is invalid. reset.\r\n':
@@ -959,6 +972,8 @@ class DAXML(metaclass=LogBase):
             cmd, result = self.get_command_result()
             if type(result) is not UpFile:
                 self.error(result)
+                if cmd == "CMD:END":
+                    self.finish_failed_command()
                 return b""
             data = self.download_raw(result=result, filename=filename, display=display)
             scmd, sresult = self.get_command_result()
