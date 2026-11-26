@@ -1,3 +1,5 @@
+README | [Русский](README_ru.md)
+
 <div align="right">
   Language:
   🇺🇸
