@@ -211,6 +211,43 @@ class TestTextScatter(unittest.TestCase):
             parse_scatter_text(dup)
         self.assertIn("duplicated", str(ctx.exception))
 
+    def test_config_version_from_nested_general_info(self):
+        # real backup scatters (e.g. begonia SPFT full-backup) nest
+        # config_version under general/info; it must surface on ScatterInfo
+        text = """- general: MTK_PLATFORM_CFG
+  info:
+    - config_version: V2.1.0
+      platform: MT6785
+      project: begonia
+- storage_type: EMMC
+  description:
+  - general: MTK_STORAGE_CFG
+    info:
+      - storage: EMMC
+        boot_channel: MSDC_0
+        block_size: 0x20000
+  - partition_index: SYS0
+    partition_name: boot
+    file_name: boot.img
+    is_download: true
+    type: NORMAL_ROM
+    linear_start_addr: 0x0
+    physical_start_addr: 0x0
+    partition_size: 0x1000
+    region: EMMC_USER
+    storage: HW_STORAGE_EMMC
+    boundary_check: true
+    is_reserved: false
+    operation_type: UPDATE
+    is_upgradable: false
+    empty_boot_needed: false
+    reserve: 0x00
+"""
+        info = parse_scatter_text(text)
+        self.assertEqual(info.config_version, "V2.1.0")
+        self.assertEqual(info.platform, "MT6785")
+        self.assertEqual(info.project, "begonia")
+
 
 class TestXmlScatter(unittest.TestCase):
     def test_v8_full(self):

@@ -39,10 +39,6 @@ FULL_FLASH_XML = """<?xml version="1.0" encoding="UTF-8"?>
     <WRITE-PRIVATE-CERT version="2.0">
       <source-file version="2.0" file_type="LOCAL_FILE" file_name="my_cert.bin"/>
     </WRITE-PRIVATE-CERT>
-    <RUN-PROGRAM version="2.0" at_address="0x40000000" jmp_address="0x40000100"
-                 signature_offset="0x0" signature_length="0x100">
-      <source-file version="2.0" file_type="LOCAL_FILE" file_name="loader.bin"/>
-    </RUN-PROGRAM>
     <REBOOT version="2.0" action="WARM-RESET"/>
     <READ-EFUSE version="2.0">
       <target-file version="2.0" file_type="LOCAL_FILE" file_name="efuse.bin"/>
@@ -50,6 +46,31 @@ FULL_FLASH_XML = """<?xml version="1.0" encoding="UTF-8"?>
   </commands>
 </cflashtool-config>
 """
+
+# RUN-PROGRAM as its own sample: the published console_mode.xsd does not list it
+# under <commands>, and map_commands must refuse it instead of silently
+# substituting CMD:BOOT-TO (see RunProgramCmdXML.cpp: BROM-stage command).
+RUN_PROGRAM_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<cflashtool-config version="2.0">
+  <general>
+    <connect-args com_port_name="COM3" version="2.0" baud_rate="115200"
+                  timeout_ms="3000" com_port_type="UART" conn_stage="brom"
+                  da_port_name="COM4">
+      <flash-xml>MT6785_Android_scatter.xml</flash-xml>
+      <auth-file>auth_sv5.auth</auth-file>
+      <cert-file>cert.bin</cert-file>
+    </connect-args>
+    <runtime-parameter version="2.0" da_log_level="INFO" system_os="WINDOWS"
+                       battery_status="1" log_channel="USB" checksum_level="6"/>
+    <log-info version="2.0" log_path="C:\\logs" clean_hours="72"/>
+  </general>
+  <commands>
+    <RUN-PROGRAM version="2.0" at_address="0x40000000" jmp_address="0x40000100"
+                 signature_offset="0x0" signature_length="0x100">
+      <source-file version="2.0" file_type="LOCAL_FILE" file_name="loader.bin"/>
+    </RUN-PROGRAM>
+  </commands>
+</cflashtool-config>"""
 
 FLASH_ALL_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <cflashtool-config version="2.0">
@@ -134,7 +155,42 @@ class TestParseFlashXml(unittest.TestCase):
         # commands
         self.assertEqual(_names(config), ["EraseFlash", "ReadFlash", "WriteFlash",
                                           "SetRsc", "WritePrivateCert",
-                                          "RunProgram", "Reboot", "ReadEfuse"])
+                                          "Reboot", "ReadEfuse"])
+
+    def test_get_rpmb_key_status_and_set_boot_mode_are_schema_members(self):
+        # both are part of the real console_mode.xsd <commands> sequence
+        # (v6.2228) but were missing from the original parser table
+        xml = FULL_FLASH_XML.replace(
+            "    <ERASE-FLASH version=\"2.0\" partition=\"userdata\" length=\"0x1000\" offset=\"0x0\"/>",
+            "    <GET-RPMB-KEY-STATUS version=\"2.0\">\n"
+            "      <target-file version=\"2.0\" file_type=\"LOCAL_FILE\" file_name=\"rpmb.bin\"/>\n"
+            "    </GET-RPMB-KEY-STATUS>\n"
+            "    <ERASE-FLASH version=\"2.0\" partition=\"userdata\" length=\"0x1000\" offset=\"0x0\"/>")
+        xml = xml.replace(
+            "    <SET-RSC version=\"2.0\" key=\"k6885v1_64[op01]\">",
+            "    <SET-BOOT-MODE version=\"2.0\" connect_type=\"USB\" adb=\"OFF\"\n"
+            "                   mobile_log=\"ON\" mode=\"FASTBOOT\"/>\n"
+            "    <SET-RSC version=\"2.0\" key=\"k6885v1_64[op01]\">")
+        config = _config(xml)
+        names = [type(c).__name__ for c in config.commands]
+        self.assertIn("GetRpmbKeyStatus", names)
+        self.assertIn("SetBootMode", names)
+        rpmb = config.commands[names.index("GetRpmbKeyStatus")]
+        self.assertEqual(rpmb.target_file.file_name, "rpmb.bin")
+        boot = config.commands[names.index("SetBootMode")]
+        self.assertEqual(boot.mode, "FASTBOOT")
+        self.assertEqual(boot.connect_type, "USB")
+        # order still enforced: SET-BOOT-MODE between FEEDBACK and SET-RSC
+        self.assertLess(names.index("GetRpmbKeyStatus"), names.index("SetBootMode"))
+
+    def test_set_boot_mode_bad_enum_rejected(self):
+        xml = FULL_FLASH_XML.replace(
+            "    <SET-RSC version=\"2.0\" key=\"k6885v1_64[op01]\">",
+            "    <SET-BOOT-MODE version=\"2.0\" connect_type=\"USB\" adb=\"MAYBE\"/>\n"
+            "    <SET-RSC version=\"2.0\" key=\"k6885v1_64[op01]\">")
+        with self.assertRaises(FlashXmlError) as ctx:
+            _config(xml)
+        self.assertIn("adb", str(ctx.exception))
 
     def test_da_file_is_optional(self):
         xml = FULL_FLASH_XML.replace("\n      <da-file>MTK_DA_V6.bin</da-file>", "")
@@ -310,20 +366,22 @@ class TestMapCommands(unittest.TestCase):
         self.assertIn("<command>CMD:WRITE-PRIVATE-CERT</command>", data)
         self.assertIn("ms-appdata:///local/my_cert.bin", data)
 
-    def test_run_program(self):
-        config = _config(FULL_FLASH_XML)
-        name, data = map_commands(config, self.xmlcmd)[5]
-        self.assertEqual(name, "RUN-PROGRAM")
-        self.assertIn("<command>CMD:BOOT-TO</command>", data)
-        self.assertIn("<at_address>0x40000000</at_address>", data)
-        # signature fields are kept on the parsed command for the caller
-        run_program = config.commands[5]
+    def test_run_program_is_parsed_but_not_mapped(self):
+        # SPFT sends CMD:RUN-PROGRAM to BROM (RunProgramCmdXML, BROM_NODE_NAME);
+        # substituting the DA-stage CMD:BOOT-TO would be a silent wire lie, so
+        # map_commands must refuse while parsing keeps the signature fields
+        config = _config(RUN_PROGRAM_XML)
+        run_program = config.commands[0]
         self.assertEqual(run_program.signature_offset, "0x0")
         self.assertEqual(run_program.signature_length, "0x100")
+        with self.assertRaises(FlashXmlError) as ctx:
+            map_commands(config, self.xmlcmd)
+        self.assertIn("RUN-PROGRAM", str(ctx.exception))
+        self.assertIn("BOOT-TO", str(ctx.exception))
 
     def test_reboot(self):
         config = _config(FULL_FLASH_XML)
-        name, data = map_commands(config, self.xmlcmd)[6]
+        name, data = map_commands(config, self.xmlcmd)[5]
         self.assertEqual(name, "REBOOT")
         self.assertIn("<command>CMD:REBOOT</command>", data)
         self.assertIn("<action>IMMEDIATE</action>", data)
@@ -331,12 +389,12 @@ class TestMapCommands(unittest.TestCase):
     def test_reboot_disconnect(self):
         xml = FULL_FLASH_XML.replace('action="WARM-RESET"', 'action="DISCONNECT"')
         config = _config(xml)
-        name, data = map_commands(config, self.xmlcmd)[6]
+        name, data = map_commands(config, self.xmlcmd)[5]
         self.assertIn("<action>DISCONNECT</action>", data)
 
     def test_read_efuse(self):
         config = _config(FULL_FLASH_XML)
-        name, data = map_commands(config, self.xmlcmd)[7]
+        name, data = map_commands(config, self.xmlcmd)[6]
         self.assertEqual(name, "READ-EFUSE")
         self.assertIn("<command>CMD:READ-EFUSE</command>", data)
 

@@ -331,7 +331,10 @@ def parse_scatter_text(text):
 
 def _apply_general(info, current):
     for key, value in current.items():
-        if key == "__config_version":
+        if key in ("__config_version", "config_version"):
+            # real text scatters carry "- config_version: V2.1.0" nested under
+            # general/info; the "__config_version" alias is kept for the
+            # originally-intended key form
             info.config_version = value
         elif key == "platform":
             info.platform = value

@@ -44,6 +44,10 @@ _ENUMS = {
     "usb_speed": ("0", "1"),
     "action": ("DISCONNECT", "IMMEDIATE", "WARM-RESET", "COLD-RESET"),
     "file_type": ("MEMORY_FILE", "LOCAL_FILE", "REMOTE_FILE"),
+    "connect_type": ("USB", "UART", "WIFI"),     # SET-BOOT-MODE/@connect_type
+    "adb": ("ON", "OFF"),                        # SET-BOOT-MODE/@adb, @mobile_log
+    "mobile_log": ("ON", "OFF"),
+    "mode": ("META", "FASTBOOT"),                # SET-BOOT-MODE/@mode (optional)
 }
 
 _HEX16 = re.compile(r"^0x[0-9a-fA-F]{1,16}$")
@@ -103,6 +107,26 @@ class LifeCycleStatus:
 
     version: str
     target_file: FileAssistant
+
+
+@dataclass
+class GetRpmbKeyStatus:
+    """console_mode.xsd target_verion_type: version + <target-file>."""
+    TAG = "GET-RPMB-KEY-STATUS"
+
+    version: str
+    target_file: FileAssistant
+
+
+@dataclass
+class SetBootMode:
+    TAG = "SET-BOOT-MODE"
+
+    version: str
+    connect_type: str          # USB | UART | WIFI (connect_type_type)
+    adb: str                   # ON | OFF (on_off_type)
+    mobile_log: str            # ON | OFF (on_off_type)
+    mode: Optional[str] = None  # META | FASTBOOT (mode_type, optional)
 
 
 @dataclass
@@ -309,6 +333,21 @@ def _p_lifecycle(el, ctx):
                            target_file=_file_assistant(el, "target-file", ctx))
 
 
+def _p_get_rpmb_key_status(el, ctx):
+    return GetRpmbKeyStatus(version=_req(el, "version", ctx),
+                            target_file=_file_assistant(el, "target-file", ctx))
+
+
+def _p_set_boot_mode(el, ctx):
+    kwargs = dict(version=_req(el, "version", ctx),
+                  connect_type=_enum(el, "connect_type", ctx),
+                  adb=_enum(el, "adb", ctx),
+                  mobile_log=_enum(el, "mobile_log", ctx))
+    if el.get("mode") is not None:
+        kwargs["mode"] = _enum(el, "mode", ctx)
+    return SetBootMode(**kwargs)
+
+
 def _p_erase_flash(el, ctx):
     return EraseFlash(version=_req(el, "version", ctx),
                       partition=_req(el, "partition", ctx),
@@ -402,9 +441,13 @@ def _p_read_efuse(el, ctx):
 
 
 # canonical <commands> sequence from console_mode.xsd; True = maxOccurs
-# unbounded (READ-FLASH / READ-PARTITION / WRITE-FLASH)
+# unbounded (READ-FLASH / READ-PARTITION / WRITE-FLASH). GET-RPMB-KEY-STATUS and
+# SET-BOOT-MODE are schema members the original table missed; RUN-PROGRAM is
+# kept parseable although the published console_mode.xsd does not list it under
+# <commands> (it exists in the SPFT binaries as a BROM-stage command).
 _COMMAND_SCHEMA = [
     ("LIFE-CYCLE-STATUS", _p_lifecycle, False),
+    ("GET-RPMB-KEY-STATUS", _p_get_rpmb_key_status, False),
     ("ERASE-FLASH", _p_erase_flash, False),
     ("FLASH-ALL", _p_flash_all, False),
     ("FLASH-UPDATE", _p_flash_update, False),
@@ -413,6 +456,7 @@ _COMMAND_SCHEMA = [
     ("READ-PARTITION", _p_read_partition, True),
     ("WRITE-FLASH", _p_write_flash, True),
     ("GET-DOWNLOADED-IMAGE-FEEDBACK", _p_feedback, False),
+    ("SET-BOOT-MODE", _p_set_boot_mode, False),
     ("SET-RSC", _p_set_rsc, False),
     ("WRITE-PRIVATE-CERT", _p_write_private_cert, False),
     ("RUN-PROGRAM", _p_run_program, False),
@@ -554,7 +598,8 @@ def map_commands(config: FlashXmlConfig, xmlcmd) -> List[Tuple[str, str]]:
     """
     mapped = []
     for cmd in config.commands:
-        if isinstance(cmd, LifeCycleStatus):
+        if isinstance(cmd, (LifeCycleStatus, GetRpmbKeyStatus, SetBootMode)):
+            # parsed-only: no xml_cmd equivalent (see module docstring)
             continue
         if isinstance(cmd, EraseFlash):
             if cmd.length in ("ALL", "MAX") or cmd.offset == "ALL":
@@ -588,8 +633,13 @@ def map_commands(config: FlashXmlConfig, xmlcmd) -> List[Tuple[str, str]]:
         elif isinstance(cmd, WritePrivateCert):
             data = xmlcmd.cmd_write_private_cert(cert_file=cmd.source_file.file_name)
         elif isinstance(cmd, RunProgram):
-            data = xmlcmd.cmd_boot_to(at_addr=_to_int(cmd.at_address, "RUN-PROGRAM at_address"),
-                                      jmp_addr=_to_int(cmd.jmp_address, "RUN-PROGRAM jmp_address"))
+            # SPFT's RUN-PROGRAM is CMD:RUN-PROGRAM targeted at BROM
+            # (RunProgramCmdXML, BROM_NODE_NAME) - NOT the DA-stage CMD:BOOT-TO.
+            # Silently substituting another command on the wire would be unsafe;
+            # refuse until a proper xml_cmd.cmd_run_program exists.
+            raise FlashXmlError(
+                "RUN-PROGRAM has no xml_cmd equivalent (SPFT sends CMD:RUN-PROGRAM "
+                "to BROM, not CMD:BOOT-TO to the DA) - refusing to substitute")
         elif isinstance(cmd, Reboot):
             data = xmlcmd.cmd_reboot(disconnect=(cmd.action == "DISCONNECT"))
         elif isinstance(cmd, WriteEfuse):
