@@ -2,6 +2,7 @@
   Язык:
   <a title="English" href="./README.md">🇺🇸</a>
   <a title="Chinese" href="./README.zh-CN.md">🇨🇳</a>
+  🇷🇺
 </div>
 
 # MTKClient
@@ -29,14 +30,14 @@ Bootrom работать не будет — используйте режим p
 
 ### Установка
 
-[Подсказки по установке на linux/macos](README-INSTALL.md)
+[Подсказки по установке на linux/macos](README-INSTALL.ru-RU.md)
 
-[Подсказки по установке на windows](README-WINDOWS.md)
+[Подсказки по установке на windows](README-WINDOWS.ru-RU.md)
 
 [Автоматический установщик для Windows](https://github.com/codefl0w/mtkclient-windows-installer)
 
 ### Использование
-[Инструкции по использованию](README-USAGE.md)
+[Инструкции по использованию](README-USAGE.ru-RU.md)
 
 ### Готовый LiveDVD (всё готово к работе, на базе Ubuntu):
 Пользователь: user, Пароль: user (на базе Ubuntu 22.04 LTS)
@@ -54,4 +55,4 @@ Bootrom работать не будет — используйте режим p
 - Неизвестные usb vid/pid для автодетекта кладите в config/usb_ids.py
 
 ## Прочее
-[Учебные материалы](learning_resources.md)
+[Учебные материалы](learning_resources.ru-RU.md)

@@ -1,9 +1,10 @@
-README | [Русский](README_ru.md)
+README | [Русский](README.ru-RU.md)
 
 <div align="right">
   Language:
   🇺🇸
   <a title="Chinese" href="./README.zh-CN.md">🇨🇳</a>
+  <a title="Russian" href="./README.ru-RU.md">🇷🇺</a>
 </div>
 
 # MTKClient
