@@ -941,6 +941,19 @@ class DAXML(metaclass=LogBase):
         if not partinfo:
             return b""
         storage, parttype, length = partinfo
+        if not isinstance(parttype, str):
+            # On a reattach to a running XML DA, chipconfig.damode is not restored, so
+            # get_storage() returns the legacy integer region (8 = EMMC user) and the DA
+            # answers 'Cannot find [8] on current device storage'.
+            flashtype = self.daconfig.storage.flashtype
+            if flashtype == "nand":
+                parttype = "NAND-WHOLE"
+            elif flashtype == "emmc":
+                parttype = "EMMC-USER"
+            else:
+                self.error(f"readflash: legacy region {parttype} for {flashtype}; no XML name known")
+                return b"" if not filename else False
+            self.info(f"readflash: legacy region id mapped to XML region {parttype}")
 
         if self.send_command(self.cmd.cmd_read_flash(parttype, addr, length), noack=True):
             cmd, result = self.get_command_result()
