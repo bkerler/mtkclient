@@ -46,6 +46,19 @@ def get_field(data, fieldname):
     return ""
 
 
+
+def get_hex_field(data, fieldname, default=0):
+    """Hex field from a DA XML reply; an empty or missing tag yields default.
+
+    Some stock DAs (Fibocom FM350-GL / MT6880 NAND) send empty tags such as
+    <page_parity_size></page_parity_size>, which int("", 16) rejects.
+    """
+    value = get_field(data, fieldname).strip()
+    if not value:
+        return default
+    return int(value, 16)
+
+
 class FileSysOp:
     key = None
     file_path = None
@@ -836,12 +849,12 @@ class DAXML(metaclass=LogBase):
                         self.cid = get_field(data, "emmc_cid")
                 elif storagetype == "NAND":
                     self.daconfig.storage.flashtype = "nand"
-                    self.daconfig.storage.nand.block_size = int(get_field(data, "block_size"), 16)
-                    self.daconfig.storage.nand.page_size = int(get_field(data, "page_size"), 16)
-                    self.daconfig.storage.nand.spare_size = int(get_field(data, "spare_size"), 16)
-                    self.daconfig.storage.nand.total_size = int(get_field(data, "total_size"), 16)
+                    self.daconfig.storage.nand.block_size = get_hex_field(data, "block_size")
+                    self.daconfig.storage.nand.page_size = get_hex_field(data, "page_size")
+                    self.daconfig.storage.nand.spare_size = get_hex_field(data, "spare_size")
+                    self.daconfig.storage.nand.total_size = get_hex_field(data, "total_size")
                     self.daconfig.storage.nand.cid = get_field(data, "id")
-                    self.daconfig.storage.nand.page_parity_size = int(get_field(data, "page_parity_size"), 16)
+                    self.daconfig.storage.nand.page_parity_size = get_hex_field(data, "page_parity_size")
                     self.daconfig.storage.nand.sub_type = get_field(data, "sub_type")
                     self.daconfig.storage.set_flash_size()
                 else:
