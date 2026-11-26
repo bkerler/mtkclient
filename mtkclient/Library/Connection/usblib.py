@@ -335,7 +335,7 @@ class UsbClass(DeviceClass):
         self.EP_OUT = None
         self.EP_IN = None
         def find_matching_device(devices):
-            for dev in list(filter(lambda x: x.idVendor in [0x0E8D, 0x1004, 0x22d9, 0x0FCE], devices)):
+            for dev in list(filter(lambda x: x.idVendor in [0x0E8D, 0x1004, 0x22d9, 0x0FCE, 0x2717], devices)):
                 if dev.idVendor in self.portconfig and dev.idProduct in self.portconfig[dev.idVendor]:
                     return dev
             return None
