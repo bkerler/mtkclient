@@ -1,4 +1,5 @@
 default_ids = {
+    0x2717: {0xFF48: 0},  # Xiaomi Preloader VCOM (Redmi Note 8 Pro/begonia): iface0=MTK VCOM bulk 0x01/0x81, ifaces1-2=HID
     0x0E8D: {0x0003: -1,  # MTK Brom
              0x6000: 2,  # MTK Preloader
              0x2000: -1,  # MTK Preloader
