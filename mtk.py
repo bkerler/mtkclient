@@ -8,6 +8,7 @@ import os
 import sys
 
 from mtkclient.Library.mtk_main import Main, metamodes
+from mtkclient.i18n import activate as activate_i18n, set_lang, t, SUPPORTED_LANGS
 
 INFO = "MTK Flash/Exploit Client V2.1.4 (c) B.Kerler 2018-2026"
 
@@ -52,55 +53,61 @@ CMDS_HELP = {
 # ================== Argument Groups ==================
 
 def add_connection_group(parser):
-    g = parser.add_argument_group("Connection & Interface")
+    g = parser.add_argument_group(t("Connection & Interface"))
     g.add_argument('--vid', type=str)
     g.add_argument('--pid', type=str)
     g.add_argument('--serialport', nargs='?', const='DETECT', default=None,
-                   help='Use serial port (can be DETECT)')
+                   help=t('Use serial port (can be DETECT)'))
     g.add_argument('--noreconnect', action='store_true')
-    g.add_argument('--stock', action='store_true', help='use stock da')
-    g.add_argument('--uartloglevel', help='Set uart log level (0=Trace, 2=Normal)')
-    g.add_argument('--logchannel', help='Set log channel ("UART","USB", "BOTH")', default="UART")
-    g.add_argument('--loglevel', help='Set log level (0=Trace, 2=Normal)')
-    g.add_argument('--write_preloader_to_file', action='store_true', help='Dump preloader to file')
-    g.add_argument('--generatekeys', action='store_true', help='Derive HW keys')
-    g.add_argument('--iot', help='Use special mode for iot MT6261/2301', action="store_true",
+    g.add_argument('--stock', action='store_true', help=t('use stock da'))
+    g.add_argument('--uartloglevel', help=t('Set uart log level (0=Trace, 2=Normal)'))
+    g.add_argument('--logchannel', help=t('Set log channel ("UART","USB", "BOTH")'), default="UART")
+    g.add_argument('--loglevel', help=t('Set log level (0=Trace, 2=Normal)'))
+    g.add_argument('--write_preloader_to_file', action='store_true', help=t('Dump preloader to file'))
+    g.add_argument('--generatekeys', action='store_true', help=t('Derive HW keys'))
+    g.add_argument('--iot', help=t('Use special mode for iot MT6261/2301'), action="store_true",
                            default=False)
-    g.add_argument('--socid', action='store_true', help='Read Soc ID')
+    g.add_argument('--socid', action='store_true', help=t('Read Soc ID'))
 
 def add_auth_group(parser):
-    g = parser.add_argument_group("Authentication")
-    g.add_argument('--auth', type=str, help="Use auth file (auth_sv5.auth)")
-    g.add_argument('--cert', type=str, help="Use cert file")
+    g = parser.add_argument_group(t("Authentication"))
+    g.add_argument('--auth', type=str, help=t("Use auth file (auth_sv5.auth)"))
+    g.add_argument('--cert', type=str, help=t("Use cert file"))
 
 
 def add_debug_group(parser):
-    g = parser.add_argument_group("Debug & Sector")
-    g.add_argument('--debugmode', action='store_true', help='Enable verbose mode')
+    g = parser.add_argument_group(t("Debug & Sector"))
+    g.add_argument('--debugmode', action='store_true', help=t('Enable verbose mode'))
 
 def add_exploit_group(parser):
-    g = parser.add_argument_group("Bootrom / Preloader Exploit")
-    g.add_argument('--loader', type=str, help='Use specific DA loader, disable autodetection')
-    g.add_argument('--preloader', help='Set the preloader filename for dram config')
-    g.add_argument('--ptype', help='Payload type: amonet, kamakiri, kamakiri2, carbonara')
-    g.add_argument('--var1', help='Set kamakiri specific var1 value')
-    g.add_argument('--uart_addr', help='Set payload uart_addr value')
-    g.add_argument('--da_addr', help='Set a specific da payload addr')
-    g.add_argument('--brom_addr', help='Set a specific brom payload addr')
-    g.add_argument('--mode', help='Set a crash mode (0=dasend1,1=dasend2,2=daread)')
-    g.add_argument('--wdt', help='Set a specific watchdog addr')
-    g.add_argument('--skipwdt', action='store_true', help='Skip wdt init')
-    g.add_argument('--crash', action='store_true', help='Enforce crash if device is in pl mode')
-    g.add_argument('--appid', help='Use app id (hexstring)')
+    g = parser.add_argument_group(t("Bootrom / Preloader Exploit"))
+    g.add_argument('--loader', type=str, help=t('Use specific DA loader, disable autodetection'))
+    g.add_argument('--preloader', help=t('Set the preloader filename for dram config'))
+    g.add_argument('--ptype', help=t('Payload type: amonet, kamakiri, kamakiri2, carbonara'))
+    g.add_argument('--var1', help=t('Set kamakiri specific var1 value'))
+    g.add_argument('--uart_addr', help=t('Set payload uart_addr value'))
+    g.add_argument('--da_addr', help=t('Set a specific da payload addr'))
+    g.add_argument('--brom_addr', help=t('Set a specific brom payload addr'))
+    g.add_argument('--mode', help=t('Set a crash mode (0=dasend1,1=dasend2,2=daread)'))
+    g.add_argument('--wdt', help=t('Set a specific watchdog addr'))
+    g.add_argument('--skipwdt', action='store_true', help=t('Skip wdt init'))
+    g.add_argument('--crash', action='store_true', help=t('Enforce crash if device is in pl mode'))
+    g.add_argument('--appid', help=t('Use app id (hexstring)'))
 
 def add_gpt_group(parser):
-    g = parser.add_argument_group("GPT & Partition")
-    g.add_argument("--sectorsize", default='0x200', help='Set default sector size')
-    g.add_argument('--gpt-num-part-entries', default='0', help='Set GPT entry count')
-    g.add_argument('--gpt-part-entry-size', default='0', help='Set GPT entry size')
-    g.add_argument('--gpt-part-entry-start-lba', default='0', help='Set GPT entry start lba sector')
-    g.add_argument('--parttype', help='Partition type (user/boot1/rpmb/lu0 etc.)')
-    g.add_argument('--skip', help='Skip partitions (comma separated names)')
+    g = parser.add_argument_group(t("GPT & Partition"))
+    g.add_argument("--sectorsize", default='0x200', help=t('Set default sector size'))
+    g.add_argument('--gpt-num-part-entries', default='0', help=t('Set GPT entry count'))
+    g.add_argument('--gpt-part-entry-size', default='0', help=t('Set GPT entry size'))
+    g.add_argument('--gpt-part-entry-start-lba', default='0', help=t('Set GPT entry start lba sector'))
+    g.add_argument('--parttype', help=t('Partition type (user/boot1/rpmb/lu0 etc.)'))
+    g.add_argument('--skip', help=t('Skip partitions (comma separated names)'))
+
+
+def add_language_group(parser):
+    g = parser.add_argument_group(t("Language"))
+    g.add_argument('--lang', choices=SUPPORTED_LANGS, default=None,
+                   help=t('Interface language ("en", "ru"). Default: "en" (or env MTK_LANG)'))
 
 
 # ================== Base Parser ==================
@@ -115,6 +122,7 @@ def create_base_parser():
     add_debug_group(parser)
     add_exploit_group(parser)
     add_gpt_group(parser)
+    add_language_group(parser)
     return parser
 
 
@@ -129,6 +137,8 @@ def add_common_flash_cmd(subparsers, name, title, parent_parser):
 
 
 def main():
+    # Detect the language before any help text is built (--lang / MTK_LANG).
+    activate_i18n(sys.argv[1:])
     base = create_base_parser()
 
     parser = argparse.ArgumentParser(
@@ -149,186 +159,190 @@ def main():
     cmd_parsers = {}
     for cmd in common_cmds:
         cmd_parsers[cmd] = add_common_flash_cmd(
-            subparsers, cmd, CMDS_HELP.get(cmd, cmd), base
+            subparsers, cmd, t(CMDS_HELP.get(cmd, cmd)), base
         )
 
     # Specific positional/required arguments
     # Read partition(s)
-    cmd_parsers["r"].add_argument("partitionname", help="Partitions (comma sep)")
-    cmd_parsers["r"].add_argument("filename", help="Output files (comma sep)")
-    cmd_parsers["r"].add_argument("--offset", help="Offset to read from")
-    cmd_parsers["r"].add_argument("--length", help="Length to read")
+    cmd_parsers["r"].add_argument("partitionname", help=t("Partitions (comma sep)"))
+    cmd_parsers["r"].add_argument("filename", help=t("Output files (comma sep)"))
+    cmd_parsers["r"].add_argument("--offset", help=t("Offset to read from"))
+    cmd_parsers["r"].add_argument("--length", help=t("Length to read"))
 
     # Write partition(s)
-    cmd_parsers["w"].add_argument("partitionname", help="Partitions (comma sep)")
-    cmd_parsers["w"].add_argument("filename", help="Input files (comma sep)")
-    cmd_parsers["w"].add_argument('--gpt_file', help='Use a gpt file instead of trying to read gpt from flash')
+    cmd_parsers["w"].add_argument("partitionname", help=t("Partitions (comma sep)"))
+    cmd_parsers["w"].add_argument("filename", help=t("Input files (comma sep)"))
+    cmd_parsers["w"].add_argument('--gpt_file', help=t('Use a gpt file instead of trying to read gpt from flash'))
 
     # Directory based
     for cmd in ["rl", "gpt", "wl"]:
-        cmd_parsers[cmd].add_argument("directory", help="Directory path")
+        cmd_parsers[cmd].add_argument("directory", help=t("Directory path"))
 
     # Full flash image
     for cmd in ["rf", "wf"]:
-        cmd_parsers[cmd].add_argument("filename", help="Flash image file")
-        cmd_parsers[cmd].add_argument("--offset", help="Byte offset")
-        cmd_parsers[cmd].add_argument("--length", help="Length")
+        cmd_parsers[cmd].add_argument("filename", help=t("Flash image file"))
+        cmd_parsers[cmd].add_argument("--offset", help=t("Byte offset"))
+        cmd_parsers[cmd].add_argument("--length", help=t("Length"))
         cmd_parsers[cmd].add_argument('--disable_internal_flash',
-                                      help='Disable internal flash read for iot MT6261/2301',
+                                      help=t('Disable internal flash read for iot MT6261/2301'),
                                       action="store_true",
                                       default=False)
 
     # Sector based
     for cmd in ["rs", "ess"]:
-        cmd_parsers[cmd].add_argument("startsector", help="Start sector")
-        cmd_parsers[cmd].add_argument("sectors", help="Sector count")
+        cmd_parsers[cmd].add_argument("startsector", help=t("Start sector"))
+        cmd_parsers[cmd].add_argument("sectors", help=t("Sector count"))
 
     # Offset based
     for cmd in ["ro", "wo"]:
-        cmd_parsers[cmd].add_argument("offset", help="Byte offset")
-        cmd_parsers[cmd].add_argument("length", help="Length")
-        cmd_parsers[cmd].add_argument("filename", help="File")
+        cmd_parsers[cmd].add_argument("offset", help=t("Byte offset"))
+        cmd_parsers[cmd].add_argument("length", help=t("Length"))
+        cmd_parsers[cmd].add_argument("filename", help=t("File"))
 
 
     # Erase
-    cmd_parsers["e"].add_argument("partitionname", help="Partition to erase")
-    cmd_parsers["es"].add_argument("partitionname", help="Partition to erase")
-    cmd_parsers["es"].add_argument("sectors", help="Sectors count")
+    cmd_parsers["e"].add_argument("partitionname", help=t("Partition to erase"))
+    cmd_parsers["es"].add_argument("partitionname", help=t("Partition to erase"))
+    cmd_parsers["es"].add_argument("sectors", help=t("Sectors count"))
 
     # Footer
-    cmd_parsers["footer"].add_argument("filename", help="Filename to store footer")
+    cmd_parsers["footer"].add_argument("filename", help=t("Filename to store footer"))
 
     # ─── Other commands ──────────────────────────────────────────────────
 
-    cmd_fs = subparsers.add_parser("fs", help="Mount as FUSE filesystem")
+    cmd_fs = subparsers.add_parser("fs", help=t("Mount as FUSE filesystem"))
     cmd_fs.add_argument("mountpoint")
     cmd_fs.add_argument("--rw", action="store_true")
 
-    subparsers.add_parser("reset", help="Send reset command", parents=[base])
-    subparsers.add_parser("meta", help="Enter meta mode", parents=[base]) \
+    subparsers.add_parser("reset", help=t("Send reset command"), parents=[base])
+    subparsers.add_parser("meta", help=t("Enter meta mode"), parents=[base]) \
         .add_argument("metamode", nargs="?", default=None, help=f"[{metamodes}]")
-    subparsers.add_parser("meta2", help="Enter meta mode (wdt)", parents=[base])
+    subparsers.add_parser("meta2", help=t("Enter meta mode (wdt)"), parents=[base])
 
-    subparsers.add_parser("dumpbrom", help=CMDS_HELP["dumpbrom"], parents=[base]
-                          ).add_argument('--filename', help='Optional filename')
-    subparsers.add_parser("dumpsram", help=CMDS_HELP["dumpsram"], parents=[base]
-                          ).add_argument('--filename', help='Optional filename')
-    subparsers.add_parser("dumppreloader", help=CMDS_HELP["dumppreloader"], parents=[base]
-                          ).add_argument('--filename', help='Optional filename')
+    subparsers.add_parser("dumpbrom", help=t(CMDS_HELP["dumpbrom"]), parents=[base]
+                          ).add_argument('--filename', help=t('Optional filename'))
+    subparsers.add_parser("dumpsram", help=t(CMDS_HELP["dumpsram"]), parents=[base]
+                          ).add_argument('--filename', help=t('Optional filename'))
+    subparsers.add_parser("dumppreloader", help=t(CMDS_HELP["dumppreloader"]), parents=[base]
+                          ).add_argument('--filename', help=t('Optional filename'))
 
-    parser_payload = subparsers.add_parser("payload", help=CMDS_HELP["payload"], parents=[base])
-    parser_payload.add_argument("--payload", type=str, help="Payload file (optional)")
+    parser_payload = subparsers.add_parser("payload", help=t(CMDS_HELP["payload"]), parents=[base])
+    parser_payload.add_argument("--payload", type=str, help=t("Payload file (optional)"))
     parser_payload.add_argument("--metamode", type=str, default=None, help=f"metamode to use [{metamodes}]")
 
-    subparsers.add_parser("crash", help=CMDS_HELP["crash"], parents=[base])
-    subparsers.add_parser("brute", help=CMDS_HELP["brute"], parents=[base])
-    subparsers.add_parser("gettargetconfig", help=CMDS_HELP["gettargetconfig"], parents=[base])
-    subparsers.add_parser("logs", help=CMDS_HELP["logs"], parents=[base])
+    subparsers.add_parser("crash", help=t(CMDS_HELP["crash"]), parents=[base])
+    subparsers.add_parser("brute", help=t(CMDS_HELP["brute"]), parents=[base])
+    subparsers.add_parser("gettargetconfig", help=t(CMDS_HELP["gettargetconfig"]), parents=[base])
+    subparsers.add_parser("logs", help=t(CMDS_HELP["logs"]), parents=[base])
 
-    cmd_peek=subparsers.add_parser("peek", help=CMDS_HELP["peek"], parents=[base])
-    cmd_peek.add_argument('address', help='Address to read from memory')
-    cmd_peek.add_argument('length', help='Bytes to read from memory')
-    cmd_peek.add_argument("--filename", help="Save to file (optional)")
+    cmd_peek=subparsers.add_parser("peek", help=t(CMDS_HELP["peek"]), parents=[base])
+    cmd_peek.add_argument('address', help=t('Address to read from memory'))
+    cmd_peek.add_argument('length', help=t('Bytes to read from memory'))
+    cmd_peek.add_argument("--filename", help=t("Save to file (optional)"))
 
-    stage=subparsers.add_parser("stage", help=CMDS_HELP["stage"], parents=[base])
-    stage.add_argument('--verifystage2', help='Verify if stage2 data has been written correctly')
-    stage.add_argument('--stage2', help='Set stage2 filename')
-    stage.add_argument('--stage2addr', help='Set stage2 loading address')
-    stage.add_argument('--filename', help='Set stage1 loader filename')
+    stage=subparsers.add_parser("stage", help=t(CMDS_HELP["stage"]), parents=[base])
+    stage.add_argument('--verifystage2', help=t('Verify if stage2 data has been written correctly'))
+    stage.add_argument('--stage2', help=t('Set stage2 filename'))
+    stage.add_argument('--stage2addr', help=t('Set stage2 loading address'))
+    stage.add_argument('--filename', help=t('Set stage1 loader filename'))
 
-    plstage=subparsers.add_parser("plstage", help=CMDS_HELP["plstage"], parents=[base])
-    plstage.add_argument('--startpartition', help='Option for plstage - Boot to (lk, tee1)')
-    plstage.add_argument('--offset', help='Address to read from memory')
-    plstage.add_argument('--length', help='Bytes to read from memory')
-    plstage.add_argument('--pl', help='pl stage filename (optional)')
-    plstage.add_argument("--metamode", type=str, help="metamode to use [off,usb,uart]")
+    plstage=subparsers.add_parser("plstage", help=t(CMDS_HELP["plstage"]), parents=[base])
+    plstage.add_argument('--startpartition', help=t('Option for plstage - Boot to (lk, tee1)'))
+    plstage.add_argument('--offset', help=t('Address to read from memory'))
+    plstage.add_argument('--length', help=t('Bytes to read from memory'))
+    plstage.add_argument('--pl', help=t('pl stage filename (optional)'))
+    plstage.add_argument("--metamode", type=str, help=t("metamode to use [off,usb,uart]"))
 
 
     # DA subcommands
-    p_da = subparsers.add_parser("da", help=CMDS_HELP["da"], parents=[base])
+    p_da = subparsers.add_parser("da", help=t(CMDS_HELP["da"]), parents=[base])
     da_subs = p_da.add_subparsers(dest="subcmd", required=True)
 
     da_peek = da_subs.add_parser("peek", parents=[base])
-    da_peek.add_argument('address', type=str, help="Address to read from (hex value)")
-    da_peek.add_argument('length', type=str, help="Length to read")
-    da_peek.add_argument('--filename', type=str, help="Save to file (optional)")
+    da_peek.add_argument('address', type=str, help=t("Address to read from (hex value)"))
+    da_peek.add_argument('length', type=str, help=t("Length to read"))
+    da_peek.add_argument('--filename', type=str, help=t("Save to file (optional)"))
 
-    da_subs.add_parser("efuse", parents=[base], help="Read efuses")
-    da_subs.add_parser("generatekeys", parents=[base], help="Generate keys")
-    da_subs.add_parser("keyserver", parents=[base], help="Enable key server")
-    da_meta = da_subs.add_parser("meta", parents=[base], help="MetaMode Tools")
-    da_meta.add_argument("metamode", type=str, help="metamode to use [off,usb,uart]")
-    da_vbmeta = da_subs.add_parser("vbmeta", parents=[base], help="Patch vbmeta partition")
+    da_subs.add_parser("efuse", parents=[base], help=t("Read efuses"))
+    da_subs.add_parser("generatekeys", parents=[base], help=t("Generate keys"))
+    da_subs.add_parser("keyserver", parents=[base], help=t("Enable key server"))
+    da_meta = da_subs.add_parser("meta", parents=[base], help=t("MetaMode Tools"))
+    da_meta.add_argument("metamode", type=str, help=t("metamode to use [off,usb,uart]"))
+    da_vbmeta = da_subs.add_parser("vbmeta", parents=[base], help=t("Patch vbmeta partition"))
     da_vbmeta.add_argument("vbmode", type=str,
-                           help="vbmeta mode (0=locked, 1=disable_verity, 2=disable_verification, 3=disable verity+verification)")
+                           help=t("vbmeta mode (0=locked, 1=disable_verity, 2=disable_verification, 3=disable verity+verification)"))
 
-    da_nvitem = da_subs.add_parser("nvitem", parents=[base], help="nvitem decryption/encryption")
+    da_nvitem = da_subs.add_parser("nvitem", parents=[base], help=t("nvitem decryption/encryption"))
     da_nvitem.add_argument('filename',type=str, help="LD0B_001.bin")
-    da_nvitem.add_argument('--encrypt', action="store_true", default=False, help='Encrypt')
+    da_nvitem.add_argument('--encrypt', action="store_true", default=False, help=t('Encrypt'))
     da_nvitem.add_argument('--seed', type=str, default="3132616263646566", help='seed')
     da_nvitem.add_argument('--aeskey', type=str, default="0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000", help='aeskey')
 
-    da_patchmodem = da_subs.add_parser("patchmodem", parents=[base], help="patch modem for imei")
+    da_patchmodem = da_subs.add_parser("patchmodem", parents=[base], help=t("patch modem for imei"))
 
-    da_imei = da_subs.add_parser("imei", parents=[base], help="imei decryption/encryption")
-    da_imei.add_argument('imeis', type=str, help="imeis, separated by ,",nargs="?", default="")
-    da_imei.add_argument('--product', type=str, default="thunder", help='productname')
-    da_imei.add_argument('--write', action="store_true", default=False, help='Write')
+    da_imei = da_subs.add_parser("imei", parents=[base], help=t("imei decryption/encryption"))
+    da_imei.add_argument('imeis', type=str, help=t("imeis, separated by ,"),nargs="?", default="")
+    da_imei.add_argument('--product', type=str, default="thunder", help=t('productname'))
+    da_imei.add_argument('--write', action="store_true", default=False, help=t('Write'))
     da_imei.add_argument('--seed', type=str, default="3132616263646566", help='seed')
     da_imei.add_argument('--aeskey', type=str,
                            default="0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000", help='aeskey')
 
-    da_rpmb = da_subs.add_parser("rpmb", parents=[base], help="RPMB Tools")
-    da_rpmb_cmds = da_rpmb.add_subparsers(dest='rpmb_subcmd', help='Commands: r w')
-    da_rpmb_r = da_rpmb_cmds.add_parser("r", help="Read rpmb")
-    da_rpmb_r.add_argument('filename', type=str, help="Filename to write data into", default="rpmb.bin", nargs="?")
-    da_rpmb_r.add_argument('--sector', help='Start sector (offset/0x100 bytes)')
-    da_rpmb_r.add_argument('--sectors', help='Sector count')
+    da_rpmb = da_subs.add_parser("rpmb", parents=[base], help=t("RPMB Tools"))
+    da_rpmb_cmds = da_rpmb.add_subparsers(dest='rpmb_subcmd', help=t('Commands: r w'))
+    da_rpmb_r = da_rpmb_cmds.add_parser("r", help=t("Read rpmb"))
+    da_rpmb_r.add_argument('filename', type=str, help=t("Filename to write data into"), default="rpmb.bin", nargs="?")
+    da_rpmb_r.add_argument('--sector', help=t('Start sector (offset/0x100 bytes)'))
+    da_rpmb_r.add_argument('--sectors', help=t('Sector count'))
 
-    da_rpmb_w = da_rpmb_cmds.add_parser("w", help="Write rpmb")
-    da_rpmb_w.add_argument('filename', type=str, help="Filename to write from", default="rpmb.bin", nargs="?")
-    da_rpmb_w.add_argument('--sector', help='Start sector (offset/0x100 bytes)')
-    da_rpmb_w.add_argument('--sectors', help='Sector count')
+    da_rpmb_w = da_rpmb_cmds.add_parser("w", help=t("Write rpmb"))
+    da_rpmb_w.add_argument('filename', type=str, help=t("Filename to write from"), default="rpmb.bin", nargs="?")
+    da_rpmb_w.add_argument('--sector', help=t('Start sector (offset/0x100 bytes)'))
+    da_rpmb_w.add_argument('--sectors', help=t('Sector count'))
 
-    da_rpmb_e = da_rpmb_cmds.add_parser("e", help="Erase rpmb")
-    da_rpmb_e.add_argument('--sector', help='Start sector (offset/0x100 bytes)')
-    da_rpmb_e.add_argument('--sectors', help='Sector count')
+    da_rpmb_e = da_rpmb_cmds.add_parser("e", help=t("Erase rpmb"))
+    da_rpmb_e.add_argument('--sector', help=t('Start sector (offset/0x100 bytes)'))
+    da_rpmb_e.add_argument('--sectors', help=t('Sector count'))
 
-    da_rpmb_a = da_rpmb_cmds.add_parser("a", help="Auth rpmbkey")
-    da_rpmb_a.add_argument('--rpmbkey', help='rpmb key (hexstring, 32 bytes)')
+    da_rpmb_a = da_rpmb_cmds.add_parser("a", help=t("Auth rpmbkey"))
+    da_rpmb_a.add_argument('--rpmbkey', help=t('rpmb key (hexstring, 32 bytes)'))
 
-    da_dump = da_subs.add_parser("memdump", parents=[base], help="Dump whole memory areas")
-    da_dump.add_argument('directory', type=str, help="Directory to dump ram dump files")
-    da_dump.add_argument('--startpartition', help='Option for plstage - Boot to (lk, tee1)')
+    da_dump = da_subs.add_parser("memdump", parents=[base], help=t("Dump whole memory areas"))
+    da_dump.add_argument('directory', type=str, help=t("Directory to dump ram dump files"))
+    da_dump.add_argument('--startpartition', help=t('Option for plstage - Boot to (lk, tee1)'))
 
-    da_dramdump = da_subs.add_parser("memdram", parents=[base], help="Dump dram memory")
-    da_dramdump.add_argument('directory', type=str, help="Directory to dump ram dump files")
-    da_dramdump.add_argument('--startpartition', help='Option for plstage - Boot to (lk, tee1)')
+    da_dramdump = da_subs.add_parser("memdram", parents=[base], help=t("Dump dram memory"))
+    da_dramdump.add_argument('directory', type=str, help=t("Directory to dump ram dump files"))
+    da_dramdump.add_argument('--startpartition', help=t('Option for plstage - Boot to (lk, tee1)'))
 
-    da_dumpbrom = da_subs.add_parser("dumpbrom", parents=[base], help="Dump whole memory areas")
+    da_dumpbrom = da_subs.add_parser("dumpbrom", parents=[base], help=t("Dump whole memory areas"))
 
-    da_poke = da_subs.add_parser("poke", parents=[base], help="Write memory")
-    da_poke.add_argument('address', type=str, help="Address to read from (hex value)")
-    da_poke.add_argument('data', type=str, help="Data to write")
+    da_poke = da_subs.add_parser("poke", parents=[base], help=t("Write memory"))
+    da_poke.add_argument('address', type=str, help=t("Address to read from (hex value)"))
+    da_poke.add_argument('data', type=str, help=t("Data to write"))
 
-    da_unlock = da_subs.add_parser("seccfg", parents=[base], help="Unlock device / Configure seccfg")
-    da_unlock.add_argument('flag', type=str, help="Needed flag (unlock,lock)")
+    da_unlock = da_subs.add_parser("seccfg", parents=[base], help=t("Unlock device / Configure seccfg"))
+    da_unlock.add_argument('flag', type=str, help=t("Needed flag (unlock,lock)"))
     da_unlock.add_argument('--critical', action="store_true", default=False,
-                           help="Retain legacy V4 behavior by updating the dm-verity state")
+                           help=t("Retain legacy V4 behavior by updating the dm-verity state"))
 
     # Minimal commands
-    subparsers.add_parser("devices", help=CMDS_HELP["devices"])\
-        .add_argument("--filter", help="Optional Filter string")
+    subparsers.add_parser("devices", help=t(CMDS_HELP["devices"]))\
+        .add_argument("--filter", help=t("Optional Filter string"))
 
-    subparsers.add_parser("script", help=CMDS_HELP["script"])\
+    subparsers.add_parser("script", help=t(CMDS_HELP["script"]))\
         .add_argument("script")
 
-    subparsers.add_parser("multi", help=CMDS_HELP["multi"])\
+    subparsers.add_parser("multi", help=t(CMDS_HELP["multi"]))\
         .add_argument("commands")
 
     # ─── Parse & Run ─────────────────────────────────────────────────────
 
     args = parser.parse_args()
+
+    # An explicit --lang flag wins over the MTK_LANG environment variable.
+    if getattr(args, "lang", None):
+        set_lang(args.lang)
 
     if not args.cmd:
         parser.print_help()
