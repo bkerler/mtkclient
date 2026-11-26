@@ -70,9 +70,14 @@ def activate(argv=None, env=None):
     return _current_lang
 
 
+def normalize_lang(value):
+    """Normalize a language code (strip surrounding whitespace, lowercase)."""
+    return value.strip().lower()
+
+
 def _apply(value):
     global _current_lang
-    lang = value.strip().lower()
+    lang = normalize_lang(value)
     if lang in SUPPORTED_LANGS:
         _current_lang = lang
     else:
@@ -217,6 +222,8 @@ _TRANSLATIONS = {
             "Режим vbmeta (0=locked, 1=disable_verity, 2=disable_verification, 3=disable verity+verification)",
         "nvitem decryption/encryption": "Расшифровка/шифрование nvitem",
         "Encrypt": "Зашифровать",
+        "seed": "Seed (начальное значение)",
+        "aeskey": "AES-ключ",
         "patch modem for imei": "Патч модема для IMEI",
         "imei decryption/encryption": "Расшифровка/шифрование IMEI",
         "imeis, separated by ,": "IMEI через запятую",

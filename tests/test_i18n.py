@@ -92,6 +92,32 @@ class I18nKeyCoverageTest(unittest.TestCase):
             self.assertEqual(missing, set(),
                              f"{source}: keys without ru translation: {sorted(missing)}")
 
+    def _module_dict_string_values(self, path, var_name):
+        """String values of a module-level dict literal, via AST (no import)."""
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        values = set()
+        for node in tree.body:
+            if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == var_name
+                    and isinstance(node.value, ast.Dict)):
+                for item in node.value.values:
+                    if isinstance(item, ast.Constant) and isinstance(item.value, str):
+                        values.add(item.value)
+        return values
+
+    def test_cmds_help_values_are_translated(self):
+        """Ratchet for non-constant keys: every CMDS_HELP value is rendered via
+        t(CMDS_HELP[...]), so a new upstream command must not silently stay
+        English in the ru locale."""
+        ru_table = i18n._TRANSLATIONS["ru"]
+        cmds = self._module_dict_string_values(
+            os.path.join(REPO_ROOT, "mtk.py"), "CMDS_HELP")
+        missing = cmds - set(ru_table)
+        self.assertEqual(missing, set(),
+                         f"CMDS_HELP values without ru translation: {sorted(missing)}")
+
 
 class CliSmokeTest(unittest.TestCase):
     """End-to-end: the CLI help renders in the selected language."""

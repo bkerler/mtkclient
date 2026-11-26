@@ -8,7 +8,8 @@ import os
 import sys
 
 from mtkclient.Library.mtk_main import Main, metamodes
-from mtkclient.i18n import activate as activate_i18n, set_lang, t, SUPPORTED_LANGS
+from mtkclient.i18n import (activate as activate_i18n, set_lang, t,
+                            SUPPORTED_LANGS, normalize_lang)
 
 INFO = "MTK Flash/Exploit Client V2.1.4 (c) B.Kerler 2018-2026"
 
@@ -107,6 +108,7 @@ def add_gpt_group(parser):
 def add_language_group(parser):
     g = parser.add_argument_group(t("Language"))
     g.add_argument('--lang', choices=SUPPORTED_LANGS, default=None,
+                   type=normalize_lang,
                    help=t('Interface language ("en", "ru"). Default: "en" (or env MTK_LANG)'))
 
 
@@ -275,8 +277,8 @@ def main():
     da_nvitem = da_subs.add_parser("nvitem", parents=[base], help=t("nvitem decryption/encryption"))
     da_nvitem.add_argument('filename',type=str, help="LD0B_001.bin")
     da_nvitem.add_argument('--encrypt', action="store_true", default=False, help=t('Encrypt'))
-    da_nvitem.add_argument('--seed', type=str, default="3132616263646566", help='seed')
-    da_nvitem.add_argument('--aeskey', type=str, default="0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000", help='aeskey')
+    da_nvitem.add_argument('--seed', type=str, default="3132616263646566", help=t('seed'))
+    da_nvitem.add_argument('--aeskey', type=str, default="0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000", help=t('aeskey'))
 
     da_patchmodem = da_subs.add_parser("patchmodem", parents=[base], help=t("patch modem for imei"))
 
@@ -284,9 +286,9 @@ def main():
     da_imei.add_argument('imeis', type=str, help=t("imeis, separated by ,"),nargs="?", default="")
     da_imei.add_argument('--product', type=str, default="thunder", help=t('productname'))
     da_imei.add_argument('--write', action="store_true", default=False, help=t('Write'))
-    da_imei.add_argument('--seed', type=str, default="3132616263646566", help='seed')
+    da_imei.add_argument('--seed', type=str, default="3132616263646566", help=t('seed'))
     da_imei.add_argument('--aeskey', type=str,
-                           default="0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000", help='aeskey')
+                           default="0102030405060708090A0B0C0D0E0F1011120B1415161718191A1B1C00000000", help=t('aeskey'))
 
     da_rpmb = da_subs.add_parser("rpmb", parents=[base], help=t("RPMB Tools"))
     da_rpmb_cmds = da_rpmb.add_subparsers(dest='rpmb_subcmd', help=t('Commands: r w'))
