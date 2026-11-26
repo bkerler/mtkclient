@@ -46,6 +46,19 @@ def get_field(data, fieldname):
     return ""
 
 
+
+def get_hex_field(data, fieldname, default=0):
+    """Hex field from a DA XML reply; an empty or missing tag yields default.
+
+    Some stock DAs (Fibocom FM350-GL / MT6880 NAND) send empty tags such as
+    <page_parity_size></page_parity_size>, which int("", 16) rejects.
+    """
+    value = get_field(data, fieldname).strip()
+    if not value:
+        return default
+    return int(value, 16)
+
+
 class FileSysOp:
     key = None
     file_path = None
@@ -185,6 +198,18 @@ class DAXML(metaclass=LogBase):
                                                                    initialize_dram=True))
         return res
 
+    def finish_failed_command(self):
+        """After a CMD:END with result != OK, complete the handshake the DA still expects:
+        ack the CMD:END, then read (and ack) the CMD:START that follows. Without this the
+        DA is left waiting for an ack and every later command desyncs (xread: Wrong length),
+        which stranded a Fibocom FM350-GL in DA mode after each refused read."""
+        self.ack()
+        scmd, _ = self.get_command_result()
+        if scmd != "CMD:START":
+            self.warning(f"finish_failed_command: expected CMD:START, got {scmd!r}")
+            return False
+        return True
+
     def send_command(self, xmldata, noack: bool = False):
         if self.xsend(data=xmldata):
             result = self.get_response()
@@ -195,6 +220,7 @@ class DAXML(metaclass=LogBase):
                 if cmd == "CMD:END":
                     if result!="OK":
                         self.error(result)
+                        self.finish_failed_command()
                         return False
                     self.ack()
                     if result == '2nd DA address is invalid. reset.\r\n':
@@ -836,12 +862,12 @@ class DAXML(metaclass=LogBase):
                         self.cid = get_field(data, "emmc_cid")
                 elif storagetype == "NAND":
                     self.daconfig.storage.flashtype = "nand"
-                    self.daconfig.storage.nand.block_size = int(get_field(data, "block_size"), 16)
-                    self.daconfig.storage.nand.page_size = int(get_field(data, "page_size"), 16)
-                    self.daconfig.storage.nand.spare_size = int(get_field(data, "spare_size"), 16)
-                    self.daconfig.storage.nand.total_size = int(get_field(data, "total_size"), 16)
+                    self.daconfig.storage.nand.block_size = get_hex_field(data, "block_size")
+                    self.daconfig.storage.nand.page_size = get_hex_field(data, "page_size")
+                    self.daconfig.storage.nand.spare_size = get_hex_field(data, "spare_size")
+                    self.daconfig.storage.nand.total_size = get_hex_field(data, "total_size")
                     self.daconfig.storage.nand.cid = get_field(data, "id")
-                    self.daconfig.storage.nand.page_parity_size = int(get_field(data, "page_parity_size"), 16)
+                    self.daconfig.storage.nand.page_parity_size = get_hex_field(data, "page_parity_size")
                     self.daconfig.storage.nand.sub_type = get_field(data, "sub_type")
                     self.daconfig.storage.set_flash_size()
                 else:
@@ -928,11 +954,26 @@ class DAXML(metaclass=LogBase):
         if not partinfo:
             return b""
         storage, parttype, length = partinfo
+        if not isinstance(parttype, str):
+            # On a reattach to a running XML DA, chipconfig.damode is not restored, so
+            # get_storage() returns the legacy integer region (8 = EMMC user) and the DA
+            # answers 'Cannot find [8] on current device storage'.
+            flashtype = self.daconfig.storage.flashtype
+            if flashtype == "nand":
+                parttype = "NAND-WHOLE"
+            elif flashtype == "emmc":
+                parttype = "EMMC-USER"
+            else:
+                self.error(f"readflash: legacy region {parttype} for {flashtype}; no XML name known")
+                return b"" if not filename else False
+            self.info(f"readflash: legacy region id mapped to XML region {parttype}")
 
         if self.send_command(self.cmd.cmd_read_flash(parttype, addr, length), noack=True):
             cmd, result = self.get_command_result()
             if type(result) is not UpFile:
                 self.error(result)
+                if cmd == "CMD:END":
+                    self.finish_failed_command()
                 return b""
             data = self.download_raw(result=result, filename=filename, display=display)
             scmd, sresult = self.get_command_result()
