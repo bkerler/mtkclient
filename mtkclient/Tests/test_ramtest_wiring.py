@@ -26,10 +26,20 @@ class TestRamTestProtocol(unittest.TestCase):
         self.assertTrue(data.endswith("</da>"))
 
     def test_calibration_wire_format(self):
+        # CalibrationRAMTestCmdXML (SPFT v6.2228): CALIBRATION addresses a host
+        # memory range (MEM://0x8000000:0x100000 in the C++ sample), not a
+        # DA-local ms-appdata file
         data = self.cmd.cmd_ram_test(function="CALIBRATION")
         self.assertIn("<command>CMD:RAM-TEST</command>", data)
         self.assertIn("<function>CALIBRATION</function>", data)
-        self.assertIn("<target_file>ms-appdata:///local/calib.bin</target_file>", data)
+        self.assertIn("<target_file>MEM://0x8000000:0x100000</target_file>", data)
+        self.assertNotIn("ms-appdata", data)
+        self.assertNotIn("start_address", data)
+
+    def test_calibration_custom_mem_range(self):
+        data = self.cmd.cmd_ram_test(function="CALIBRATION", host_mem_offset=0x7fe800000000,
+                                     host_mem_length=0x200000)
+        self.assertIn("<target_file>MEM://0x7fe800000000:0x200000</target_file>", data)
         self.assertNotIn("start_address", data)
 
     def test_dram_repair_wire_format(self):
@@ -47,11 +57,15 @@ class TestRamTestProtocol(unittest.TestCase):
 
 
 class TestXmlFlashExtWiring(unittest.TestCase):
-    def _make_ext(self, send_result="OK"):
-        """Build an XmlFlashExt against stub mtk/xmlflash objects, recording commands."""
+    def _make_ext(self, script=None, send_result=True):
+        """Build an XmlFlashExt against stub mtk/xmlflash objects. `script` is
+        the scripted DA answer sequence for get_command_result() as
+        (cmd, result) tuples; transfer calls are recorded in `calls`."""
         from mtkclient.Library.DA.xmlflash.extension.v6 import XmlFlashExt
 
         sent = []
+        calls = {"noack": None, "download": [], "upload": [], "ack": 0}
+        script = list(script or [])
 
         class Port:
             @staticmethod
@@ -91,7 +105,27 @@ class TestXmlFlashExtWiring(unittest.TestCase):
             @staticmethod
             def send_command(xmldata, noack=False):
                 sent.append(xmldata)
+                calls["noack"] = noack
                 return send_result
+
+            @staticmethod
+            def get_command_result():
+                return script.pop(0)
+
+            @staticmethod
+            def download(result):
+                calls["download"].append(result)
+                return b"SUCCEEDED"
+
+            @staticmethod
+            def upload(result, data, display=True, raw=False, drain_end=True):
+                calls["upload"].append((result, bytes(data), drain_end))
+                return True
+
+            @staticmethod
+            def ack():
+                calls["ack"] += 1
+                return True
 
             @staticmethod
             def xsend(data, datatype=None, is64bit=False):
@@ -104,27 +138,92 @@ class TestXmlFlashExtWiring(unittest.TestCase):
 
         xmlflash = XmlFlash()
         ext = XmlFlashExt(Mtk(), xmlflash, 4)
-        return ext, sent
+        return ext, sent, calls
 
     def test_ram_test_sends_protocol_command(self):
-        ext, sent = self._make_ext()
+        # Transfer-free transaction: the DA closes with the END/START drain
+        script = [("CMD:END", "OK"), ("CMD:START", "START")]
+        ext, sent, calls = self._make_ext(script=script)
         result = ext.ram_test(function="FLIP", start_address=0x4000000,
                               length=0x100000, repeat=0xA)
         self.assertEqual(result, "OK")
         self.assertEqual(len(sent), 1)
         self.assertIn("<command>CMD:RAM-TEST</command>", sent[0])
+        self.assertTrue(calls["noack"])
+        self.assertEqual(calls["upload"], [])
 
-    def test_dram_repair_sends_protocol_command(self):
-        ext, sent = self._make_ext()
+    def test_ram_test_serves_upload_file_verdict(self):
+        # flash.dll: the DA reports the FLIP verdict via CMD:UPLOAD-FILE
+        # (the host pulls the payload), then closes with CMD:END/CMD:START
+        from mtkclient.Library.DA.xmlflash.xml_lib import UpFile
+
+        upfile = UpFile("CHK_NO", "RAM test.", "MEM://0x8000000:0x100000", "0x1000")
+        script = [("CMD:UPLOAD-FILE", upfile), ("CMD:END", "OK"), ("CMD:START", "START")]
+        ext, sent, calls = self._make_ext(script=script)
+        result = ext.ram_test(function="FLIP", start_address=0x4000000,
+                              length=0x100000, repeat=0xA)
+        self.assertEqual(result, "SUCCEEDED")
+        self.assertEqual(calls["download"], [upfile])
+        self.assertEqual(calls["ack"], 1)
+
+    def test_ram_test_download_file_request_without_data_fails(self):
+        from mtkclient.Library.DA.xmlflash.xml_lib import DwnFile
+
+        script = [("CMD:DOWNLOAD-FILE",
+                   DwnFile("CHK_NO", "dram.info", "ms-appdata:///local/dram.info", 0x1000))]
+        ext, sent, calls = self._make_ext(script=script)
+        self.assertEqual(ext.ram_test(function="FLIP"), "FAILED")
+        self.assertEqual(calls["upload"], [])
+
+    def test_ram_test_rejected_command_fails(self):
+        ext, sent, calls = self._make_ext(send_result=False, script=[])
+        self.assertEqual(ext.ram_test(function="FLIP"), "FAILED")
+        self.assertEqual(len(sent), 1)
+
+    def test_dram_repair_serves_download_file_and_verdict(self):
+        # C++ DebugDRAMRepairCmdXML: the DA fetches dram.info via
+        # CMD:DOWNLOAD-FILE, then reports SUCCEEDED/NO-NEED/FAILED (the
+        # target_file result string) via CMD:UPLOAD-FILE
+        from mtkclient.Library.DA.xmlflash.xml_lib import DwnFile, UpFile
+
+        script = [
+            ("CMD:DOWNLOAD-FILE",
+             DwnFile("CHK_NO", "dram.info", "ms-appdata:///local/dram.info", 0x1000)),
+            ("CMD:UPLOAD-FILE",
+             UpFile("CHK_NO", "dram-repair", "MEM://0x10000:0x1000", "0x1000")),
+            ("CMD:END", "OK"),
+            ("CMD:START", "START"),
+        ]
+        ext, sent, calls = self._make_ext(script=script)
         paramfile = os.path.join(os.path.dirname(__file__), "fixtures", "dram.info")
         result = ext.dram_repair(param_file=paramfile, mem_offset=0x10000, mem_length=0x1000)
-        self.assertEqual(result, "OK")
+        self.assertEqual(result, "SUCCEEDED")
         self.assertEqual(len(sent), 1)
         self.assertIn("<command>CMD:DEBUG:DRAM-REPAIR</command>", sent[0])
         self.assertIn(f"<param_file>{paramfile}</param_file>", sent[0])
+        self.assertEqual(len(calls["upload"]), 1)
+        with open(paramfile, "rb") as fhandle:
+            self.assertEqual(calls["upload"][0][1], fhandle.read())
+        self.assertFalse(calls["upload"][0][2])  # the loop owns the END/START drain
+
+    def test_dram_repair_verdict_in_cmd_end(self):
+        # A DA may also report the verdict in the CMD:END result field
+        from mtkclient.Library.DA.xmlflash.xml_lib import DwnFile
+
+        script = [
+            ("CMD:DOWNLOAD-FILE",
+             DwnFile("CHK_NO", "dram.info", "ms-appdata:///local/dram.info", 0x1000)),
+            ("CMD:END", "NO-NEED"),
+            ("CMD:START", "START"),
+        ]
+        ext, sent, calls = self._make_ext(script=script)
+        paramfile = os.path.join(os.path.dirname(__file__), "fixtures", "dram.info")
+        result = ext.dram_repair(param_file=paramfile, mem_offset=0x10000, mem_length=0x1000)
+        self.assertEqual(result, "NO-NEED")
+        self.assertEqual(calls["ack"], 1)
 
     def test_dram_repair_missing_file_fails_early(self):
-        ext, sent = self._make_ext()
+        ext, sent, calls = self._make_ext()
         result = ext.dram_repair(param_file="/nonexistent/dram.info")
         self.assertEqual(result, "FAILED")
         self.assertEqual(len(sent), 0)

@@ -449,13 +449,16 @@ class DAXML(metaclass=LogBase):
                 return cmd, message
         return cmd, result
 
-    def upload(self, result: DwnFile, data, display=True, raw=False):
+    def upload(self, result: DwnFile, data, display=True, raw=False, drain_end=True):
         if type(result) is DwnFile:
             # checksum = result.checksum
             # info = result.info
             source_file = result.source_file
             packet_length = result.packet_length
-            if ":" in source_file:
+            # Only a MEM://addr:len URI carries the transfer length inside the
+            # URI; ms-appdata:///local/... names and plain paths don't, the
+            # length is the data itself.
+            if source_file and source_file.startswith("MEM://"):
                 tmp = source_file.split(":")[2]
                 length = int(tmp[2:], 16)
             else:
@@ -487,6 +490,13 @@ class DAXML(metaclass=LogBase):
                     bytestowrite -= packet_length
                 if raw:
                     self.ack()
+                if not drain_end:
+                    # The caller owns the CMD:END/CMD:START drain (e.g. the
+                    # file-transfer serving loop, which may still receive a
+                    # CMD:UPLOAD-FILE verdict before the CMD:END).
+                    if display:
+                        pg.done()
+                    return True
                 cmd, result = self.get_command_result()
                 self.ack()
                 if display:

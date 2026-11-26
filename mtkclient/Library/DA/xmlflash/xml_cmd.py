@@ -154,7 +154,7 @@ class XMLCmd(metaclass=LogBase):
         return cmd
 
     def cmd_ram_test(self, function: str = "FLIP", start_address: int = 0x4000000, length: int = 0x100000,
-                     repeat: int = 0xA):
+                     repeat: int = 0xA, host_mem_offset: int = 0x8000000, host_mem_length: int = 0x100000):
         if function == "FLIP":
             content = {
                 "arg": [
@@ -165,10 +165,13 @@ class XMLCmd(metaclass=LogBase):
                 ]
             }
         else:
+            # CalibrationRAMTestCmdXML (SPFT V6 flash.dll): CALIBRATION hands the
+            # DA a host memory range for the calibration result (MEM://0x8000000:
+            # 0x100000 in the C++ sample), not a DA-local ms-appdata file.
             content = {
                 "arg": [
                     "<function>CALIBRATION</function>",
-                    "<target_file>ms-appdata:///local/calib.bin</target_file>"
+                    f"<target_file>MEM://{hex(host_mem_offset)}:{hex(host_mem_length)}</target_file>"
                 ]
             }
         cmd = self.create_cmd("RAM-TEST", content)

@@ -33,10 +33,15 @@ class TestWritePrivateCertProtocol(unittest.TestCase):
 
 
 class TestXmlFlashExtWiring(unittest.TestCase):
-    def _make_ext(self, send_result="OK"):
+    def _make_ext(self, script=None, send_result=True):
+        """Build an XmlFlashExt against stub mtk/xmlflash objects. `script` is
+        the scripted DA answer sequence for get_command_result() as
+        (cmd, result) tuples; transfer calls are recorded in `calls`."""
         from mtkclient.Library.DA.xmlflash.extension.v6 import XmlFlashExt
 
         sent = []
+        calls = {"noack": None, "download": [], "upload": [], "ack": 0}
+        script = list(script or [])
 
         class Port:
             @staticmethod
@@ -76,7 +81,27 @@ class TestXmlFlashExtWiring(unittest.TestCase):
             @staticmethod
             def send_command(xmldata, noack=False):
                 sent.append(xmldata)
+                calls["noack"] = noack
                 return send_result
+
+            @staticmethod
+            def get_command_result():
+                return script.pop(0)
+
+            @staticmethod
+            def download(result):
+                calls["download"].append(result)
+                return b"SUCCEEDED"
+
+            @staticmethod
+            def upload(result, data, display=True, raw=False, drain_end=True):
+                calls["upload"].append((result, bytes(data), drain_end))
+                return True
+
+            @staticmethod
+            def ack():
+                calls["ack"] += 1
+                return True
 
             @staticmethod
             def xsend(data, datatype=None, is64bit=False):
@@ -89,10 +114,43 @@ class TestXmlFlashExtWiring(unittest.TestCase):
 
         xmlflash = XmlFlash()
         ext = XmlFlashExt(Mtk(), xmlflash, 4)
-        return ext, sent
+        return ext, sent, calls
 
-    def test_write_private_cert_sends_protocol_command(self):
-        ext, sent = self._make_ext()
+    def test_write_private_cert_serves_download_file(self):
+        # The DA fetches the cert from its ms-appdata local storage via
+        # CMD:DOWNLOAD-FILE; the host hands over the real file bytes, then
+        # the transaction closes with CMD:END/CMD:START
+        from mtkclient.Library.DA.xmlflash.xml_lib import DwnFile
+
+        cert_bytes = b"\x01CERT-PAYLOAD\x02" * 24
+        fd, certfile = tempfile.mkstemp(suffix=".bin")
+        try:
+            with os.fdopen(fd, "wb") as fhandle:
+                fhandle.write(cert_bytes)
+            script = [
+                ("CMD:DOWNLOAD-FILE",
+                 DwnFile("CHK_NO", "cert", f"ms-appdata:///local/{os.path.basename(certfile)}",
+                         0x1000)),
+                ("CMD:END", "OK"),
+                ("CMD:START", "START"),
+            ]
+            ext, sent, calls = self._make_ext(script=script)
+            result = ext.write_private_cert(cert_file=certfile)
+        finally:
+            os.unlink(certfile)
+        self.assertEqual(result, "OK")
+        self.assertEqual(len(sent), 1)
+        self.assertTrue(calls["noack"])
+        self.assertIn("<command>CMD:WRITE-PRIVATE-CERT</command>", sent[0])
+        self.assertIn(f"ms-appdata:///local/{os.path.basename(certfile)}", sent[0])
+        self.assertEqual(len(calls["upload"]), 1)
+        self.assertEqual(calls["upload"][0][1], cert_bytes)
+        self.assertFalse(calls["upload"][0][2])  # the loop owns the END/START drain
+
+    def test_write_private_cert_plain_success(self):
+        # Transfer-free transaction: the DA closes with the END/START drain
+        script = [("CMD:END", "OK"), ("CMD:START", "START")]
+        ext, sent, calls = self._make_ext(script=script)
         fd, certfile = tempfile.mkstemp(suffix=".bin")
         os.close(fd)
         try:
@@ -103,9 +161,10 @@ class TestXmlFlashExtWiring(unittest.TestCase):
         self.assertEqual(len(sent), 1)
         self.assertIn("<command>CMD:WRITE-PRIVATE-CERT</command>", sent[0])
         self.assertIn(f"ms-appdata:///local/{os.path.basename(certfile)}", sent[0])
+        self.assertEqual(calls["upload"], [])
 
     def test_write_private_cert_missing_file_fails_early(self):
-        ext, sent = self._make_ext()
+        ext, sent, calls = self._make_ext()
         result = ext.write_private_cert(cert_file="/nonexistent/cert.bin")
         self.assertEqual(result, "FAILED")
         self.assertEqual(len(sent), 0)
