@@ -1,4 +1,3 @@
-README | [Русский](README.ru-RU.md)
 
 <div align="right">
   Language:
