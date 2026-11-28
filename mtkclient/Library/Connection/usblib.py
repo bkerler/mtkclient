@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # (c) B.Kerler 2018-2025 GPLv3 License
 import errno
+import glob
 import logging
 import os
 import sys
@@ -366,7 +367,7 @@ class UsbClass(DeviceClass):
         self.EP_OUT = None
         self.EP_IN = None
         def find_matching_device(devices):
-            for dev in list(filter(lambda x: x.idVendor in [0x0E8D, 0x1004, 0x22d9, 0x0FCE], devices)):
+            for dev in list(filter(lambda x: x.idVendor in [0x0E8D, 0x1004, 0x22d9, 0x0FCE, 0x2717], devices)):
                 if dev.idVendor in self.portconfig and dev.idProduct in self.portconfig[dev.idVendor]:
                     return dev
             return None
@@ -439,12 +440,53 @@ class UsbClass(DeviceClass):
 
         if self.interface != -1:
             itf = usb.util.find_descriptor(self.configuration, bInterfaceNumber=self.interface)
-            try:
-                if self.device.is_kernel_driver_active(0):
-                    self.debug("Detaching kernel driver")
+            if sys.platform == "darwin" and glob.glob("/dev/cu.usbmodem*"):
+                # macOS: AppleUSBACM claims interface 0 (CDC-Control) exclusively.
+                # is_kernel_driver_active() is NOT_SUPPORTED on darwin, so the
+                # gated detach below never fires. libusb >= 1.0.25 implements
+                # detach_kernel_driver() on darwin as a whole-device capture
+                # (USBDeviceReEnumerate + kUSBReEnumerateCaptureDeviceMask,
+                # libusb PR #911) which evicts ALL kernel drivers from ALL
+                # interfaces of the device. Requires root (sudo) — libusb
+                # issue #1014: the com.apple.vm.device-access entitlement is
+                # only for VM apps; CLI rescue runs under sudo instead.
+                # Capture is only needed while the ACM serial node exists; it
+                # re-enumerates the device, so after it we must re-find the
+                # device and rebuild the configuration before claiming.
+                try:
                     self.device.detach_kernel_driver(0)
-            except Exception as err:
-                self.debug(f"No kernel driver supported: {str(err)}")
+                    self.info("darwin: kernel driver detached (USB device captured)")
+                    dev2 = None
+                    for _ in range(40):
+                        dev2 = usb.core.find(idVendor=self.vid, idProduct=self.pid,
+                                             backend=self.backend)
+                        if dev2 is not None:
+                            break
+                        time.sleep(0.05)
+                    if dev2 is None:
+                        self.error("darwin: device did not return after capture")
+                        return False
+                    self.device = dev2
+                    try:
+                        self.device.set_configuration()
+                    except usb.core.USBError:
+                        pass
+                    self.configuration = self.device.get_active_configuration()
+                    itf = usb.util.find_descriptor(self.configuration,
+                                                   bInterfaceNumber=self.interface)
+                except (usb.core.USBError, NotImplementedError, AttributeError) as err:
+                    if getattr(err, "errno", None) == errno.EACCES:
+                        self.info("darwin: capture refused (needs root/sudo) — "
+                                  "claim will likely fail with errno 13")
+                    else:
+                        self.info(f"darwin: detach skipped: {str(err).strip()[:90]}")
+            else:
+                try:
+                    if self.device.is_kernel_driver_active(0):
+                        self.debug("Detaching kernel driver")
+                        self.device.detach_kernel_driver(0)
+                except Exception as err:
+                    self.debug(f"No kernel driver supported: {str(err)}")
             try:
                 usb.util.claim_interface(self.device, 0)
             except usb.core.USBError as err:
