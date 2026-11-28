@@ -50,8 +50,9 @@ def raise_if_usb_access_denied(err, operation=""):
 
     Any other error is returned untouched so callers keep their existing
     handling for non-EACCES failures."""
-    # errno is only mapped by pyusb >= 1.2; older pyusb exposes the raw
-    # libusb code, so also match LIBUSB_ERROR_ACCESS (-3) directly.
+    # Match either the mapped errno or the raw libusb code: the errno mapping
+    # exists across pyusb versions, but matching backend_error_code == -3
+    # (LIBUSB_ERROR_ACCESS) directly is stable regardless of the mapping.
     is_access_denied = (
         isinstance(err, usb.core.USBError)
         and (getattr(err, "errno", None) == errno.EACCES

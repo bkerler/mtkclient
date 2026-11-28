@@ -248,7 +248,8 @@ class DarwinCaptureTest(unittest.TestCase):
     def test_capture_denied_surfaces_eacces_from_claim(self):
         # Without root the capture itself raises EACCES; the claim that
         # follows must still surface UsbResetMidTransferError (part-1
-        # contract), and the log must name the permissions cause.
+        # contract) so the retry loop reports the failure instead of
+        # silently proceeding with an unclaimed interface.
         device = DetachableFakeDevice()
 
         def denied_detach(interface):
