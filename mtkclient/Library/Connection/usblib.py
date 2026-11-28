@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 # (c) B.Kerler 2018-2025 GPLv3 License
+import errno
+import glob
 import logging
 import os
 import sys
@@ -21,6 +23,44 @@ from ctypes import c_void_p, c_int
 from mtkclient.Library.DA.xmlflash.xml_param import max_xml_data_length
 from mtkclient.Library.utils import write_object
 from mtkclient.Library.Connection.devicehandler import DeviceClass
+
+USB_RESET_MID_TRANSFER_MSG = "USB reset mid-transfer (kamakiri crash) - retry expected"
+
+
+class UsbResetMidTransferError(Exception):
+    """libusb EACCES (errno 13 / LIBUSB_ERROR_ACCESS) surfaced, not swallowed.
+
+    On macOS libusb maps kIOReturnExclusiveAccess to LIBUSB_ERROR_ACCESS
+    (errno 13); in the kamakiri flow this marks the USB device instance
+    resetting mid-transfer (the exploit crashed the preloader and the BROM
+    port re-enumerates). Raised as a dedicated class (NOT a usb.core.USBError
+    subclass) so the upper retry loop can distinguish the expected
+    reset-mid-transfer condition from a plain permissions problem."""
+
+    def __init__(self, usb_error, operation=""):
+        self.usb_error = usb_error
+        self.errno = getattr(usb_error, "errno", None)
+        self.operation = operation
+        detail = f" during {operation}" if operation else ""
+        super().__init__(f"{USB_RESET_MID_TRANSFER_MSG}{detail}: {usb_error}")
+
+
+def raise_if_usb_access_denied(err, operation=""):
+    """Re-raise a libusb EACCES (errno 13) as UsbResetMidTransferError.
+
+    Any other error is returned untouched so callers keep their existing
+    handling for non-EACCES failures."""
+    # Match either the mapped errno or the raw libusb code: the errno mapping
+    # exists across pyusb versions, but matching backend_error_code == -3
+    # (LIBUSB_ERROR_ACCESS) directly is stable regardless of the mapping.
+    is_access_denied = (
+        isinstance(err, usb.core.USBError)
+        and (getattr(err, "errno", None) == errno.EACCES
+             or getattr(err, "backend_error_code", None) == -3)
+    )
+    if is_access_denied:
+        raise UsbResetMidTransferError(err, operation) from err
+    return err
 
 USB_DIR_OUT = 0  # to device
 USB_DIR_IN = 0x80  # to host
@@ -327,6 +367,18 @@ class UsbClass(DeviceClass):
             return None
         return backend
 
+    def _darwin_capture_needed(self):
+        """Gate the (root-only, re-enumerating) darwin capture.
+
+        Once the device has been captured in this UsbClass lifetime, never
+        capture again — the kernel driver was already evicted and repeating
+        the capture would only churn re-enumerations. Otherwise capture only
+        while a cu.usbmodem serial node exists (absent node = no ACM driver
+        attachment to release)."""
+        if getattr(self, "_darwin_captured", False):
+            return False
+        return bool(glob.glob("/dev/cu.usbmodem*"))
+
     def connect(self, ep_in=-1, ep_out=-1, devclass=0x2):
         if self.connected:
             self.close()
@@ -408,16 +460,81 @@ class UsbClass(DeviceClass):
 
         if self.interface != -1:
             itf = usb.util.find_descriptor(self.configuration, bInterfaceNumber=self.interface)
-            try:
-                if self.device.is_kernel_driver_active(0):
-                    self.debug("Detaching kernel driver")
+            if sys.platform == "darwin" and self._darwin_capture_needed():
+                # macOS: AppleUSBACM claims interface 0 (CDC-Control) exclusively.
+                # is_kernel_driver_active() is NOT_SUPPORTED on darwin, so the
+                # gated detach below never fires. libusb >= 1.0.25 implements
+                # detach_kernel_driver() on darwin as a whole-device capture
+                # (USBDeviceReEnumerate + kUSBReEnumerateCaptureDeviceMask,
+                # libusb PR #911) which evicts ALL kernel drivers from ALL
+                # interfaces of the device. Requires root (sudo) — libusb
+                # issue #1014: the com.apple.vm.device-access entitlement is
+                # only for VM apps; CLI rescue runs under sudo instead.
+                # Capture is only needed while an ACM serial node exists; it
+                # re-enumerates the device, so after it we must re-find the
+                # device and rebuild the configuration before claiming.
+                try:
                     self.device.detach_kernel_driver(0)
-            except Exception as err:
-                self.debug(f"No kernel driver supported: {str(err)}")
+                    self._darwin_captured = True
+                    self.info("darwin: kernel driver detached (USB device captured)")
+                    dev2 = None
+                    for _ in range(40):
+                        dev2 = usb.core.find(idVendor=self.vid, idProduct=self.pid,
+                                             backend=self.backend)
+                        if dev2 is not None:
+                            break
+                        time.sleep(0.05)
+                    if dev2 is None:
+                        self.error("darwin: device did not return after capture")
+                        return False
+                    self.device = dev2
+                except usb.core.USBError as err:
+                    if getattr(err, "errno", None) == errno.EACCES or \
+                            getattr(err, "backend_error_code", None) == -3:
+                        self.error("darwin: capture requires root (sudo) — USB access "
+                                   "denied by the kernel driver. If no exploit flow "
+                                   "is running, this is a permissions problem, not a "
+                                   "transient reset; run under sudo or stop the "
+                                   "process holding the device.")
+                    else:
+                        self.info(f"darwin: capture skipped: {str(err).strip()[:90]}")
+                except NotImplementedError:
+                    self.error("darwin: capture unsupported — libusb >= 1.0.25 is "
+                               "required for detach_kernel_driver() on darwin")
+                else:
+                    # Rebuild derived state after the re-enumeration. Distinct
+                    # handling so a rebuild failure is never reported as a
+                    # skipped capture and never continues with stale objects.
+                    try:
+                        try:
+                            self.device.set_configuration()
+                        except usb.core.USBError:
+                            pass
+                        self.configuration = self.device.get_active_configuration()
+                        itf = usb.util.find_descriptor(self.configuration,
+                                                       bInterfaceNumber=self.interface)
+                    except (usb.core.USBError, AttributeError) as err:
+                        self.error(f"darwin: state rebuild after capture failed: "
+                                   f"{str(err).strip()[:90]}")
+                        return False
+            else:
+                try:
+                    if self.device.is_kernel_driver_active(0):
+                        self.debug("Detaching kernel driver")
+                        self.device.detach_kernel_driver(0)
+                except Exception as err:
+                    self.debug(f"No kernel driver supported: {str(err)}")
             try:
                 usb.util.claim_interface(self.device, 0)
-            except Exception:
-                pass
+            except usb.core.USBError as err:
+                # EACCES (errno 13) on claim must not be swallowed: on macOS it
+                # marks the re-enumerated BROM instance after a kamakiri crash
+                # (kIOReturnExclusiveAccess -> LIBUSB_ERROR_ACCESS). Surface it
+                # so the retry loop reconnects instead of running with an
+                # unclaimed interface.
+                raise_if_usb_access_denied(err, f"claim_interface(0) on vid={self.vid} pid={self.pid}")
+            except Exception as err:
+                self.debug(f"claim_interface(0) failed (non-USBError): {str(err)}")
 
             self.debug(self.configuration)
             try:
