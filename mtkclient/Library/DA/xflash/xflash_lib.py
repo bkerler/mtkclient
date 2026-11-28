@@ -3,6 +3,10 @@
 # (c) B.Kerler 2018-2025 GPLv3 License
 import logging
 import time
+
+import usb.core
+
+from mtkclient.Library.Connection.usblib import UsbResetMidTransferError
 import os
 import sys
 from binascii import hexlify
@@ -1028,7 +1032,12 @@ class DAXFlash(metaclass=LogBase):
             self.set_usb_speed()
             self.mtk.port.close(reset=True)
             time.sleep(2)
-            while not self.mtk.port.cdc.connect():
+            while True:
+                try:
+                    if self.mtk.port.cdc.connect():
+                        break
+                except (usb.core.USBError, UsbResetMidTransferError) as err:
+                    self.debug(f"Reconnect attempt failed: {str(err)}")
                 time.sleep(0.5)
             self.info("Connected to stage2 with higher speed")
             self.mtk.port.cdc.set_fast_mode(True)

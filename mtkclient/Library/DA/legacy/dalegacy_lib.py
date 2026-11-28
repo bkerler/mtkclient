@@ -5,6 +5,10 @@ import logging
 import os
 import sys
 import time
+
+import usb.core
+
+from mtkclient.Library.Connection.usblib import UsbResetMidTransferError
 from struct import pack, unpack
 from binascii import hexlify
 from mtkclient.Library.DA.legacy.dalegacy_flash_param import (Legacy_NandInfo64, Legacy_NorInfo, Legacy_NandInfo32,
@@ -657,7 +661,12 @@ class DALegacy(metaclass=LogBase):
                             self.set_usb_cmd()
                             self.mtk.port.close(reset=True)
                             time.sleep(1)
-                            while not self.mtk.port.cdc.connect():
+                            while True:
+                                try:
+                                    if self.mtk.port.cdc.connect():
+                                        break
+                                except (usb.core.USBError, UsbResetMidTransferError) as err:
+                                    self.debug(f"Reconnect attempt failed: {str(err)}")
                                 self.info("Waiting for reconnection")
                                 time.sleep(0.5)
                             if self.check_usb_cmd():
