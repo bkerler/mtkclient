@@ -1246,6 +1246,113 @@ class XmlFlashExt(metaclass=LogBase):
             return data
         return None
 
+    def _send_and_serve_file_transfers(self, xmlcmd: str, upload_data: Optional[bytes] = None) -> str:
+        """
+        Send xmlcmd and serve the DA's file-transfer follow-ups until the
+        transaction closes. SPFT V6 answers RAM-TEST / DEBUG:DRAM-REPAIR /
+        WRITE-PRIVATE-CERT not with an immediate CMD:END but with
+        CMD:UPLOAD-FILE (the DA pushes result data: the RAM test verdict or
+        the calibration blob for the MEM:// target_file) and/or
+        CMD:DOWNLOAD-FILE (the DA fetches the host file promised in the
+        command: dram.info, the private cert), then closes with
+        CMD:END/CMD:START. Serves every transfer with the same wire idiom as
+        the DAXML flows (get_sys_property, writeflash) and returns the final
+        verdict string; "FAILED" on any protocol error.
+        """
+        # Deferred import: xml_lib imports this module (XmlFlashExt).
+        from mtkclient.Library.DA.xmlflash.xml_lib import DwnFile, UpFile
+
+        sent = self.xflash.send_command(xmlcmd, noack=True)
+        if sent is not True:
+            self.error(f"Command rejected: {sent}")
+            return "FAILED"
+        verdict = ""
+        while True:
+            cmd, result = self.xflash.get_command_result()
+            if type(result) is UpFile:
+                # DA pushes result data (RAM test verdict / calibration blob)
+                data = self.xflash.download(result)
+                if data is False:
+                    self.error("Error on downloading DA data.")
+                    return "FAILED"
+                verdict = data.decode('utf-8', errors='replace')
+                continue
+            if type(result) is DwnFile:
+                # DA fetches the local file named in the command's arg
+                if upload_data is None:
+                    self.error(f"DA requested file {result.source_file} but no upload data is available.")
+                    return "FAILED"
+                if not self.xflash.upload(result, upload_data, display=False, drain_end=False):
+                    self.error(f"Error on uploading {result.source_file} to the DA.")
+                    return "FAILED"
+                continue
+            if cmd == "CMD:END":
+                if result not in ("", "OK"):
+                    verdict = result
+                self.xflash.ack()
+                tcmd, tresult = self.xflash.get_command_result()
+                if tresult != "START":
+                    self.error(f"Expected CMD:START after CMD:END, got {tresult}")
+                    return "FAILED"
+                return verdict if verdict else "OK"
+            self.error(f"Unexpected DA response: {cmd} {result}")
+            return "FAILED"
+
+    def ram_test(self, function: str = "FLIP", start_address: int = 0x4000000,
+                 length: int = 0x100000, repeat: int = 0xA) -> str:
+        """
+        CMD:RAM-TEST (SPFT V6 flash.dll, see MemoryTestCommand): DRAM flip test or
+        calibration. The DA reports progress via CMD:PROGRESS-REPORT and the
+        verdict/calibration data via CMD:UPLOAD-FILE, then closes with
+        CMD:END/CMD:START. Returns the final verdict string.
+        """
+        xmlcmd = self.xflash.cmd.cmd_ram_test(function=function, start_address=start_address,
+                                              length=length, repeat=repeat)
+        self.info(f"Running RAM test ({function}) on {hex(start_address)}.."
+                  f"{hex(start_address + length)}")
+        result = self._send_and_serve_file_transfers(xmlcmd)
+        self.info(f"RAM test result: {result}")
+        return result
+
+    def dram_repair(self, param_file: str = "D:/dram.info", mem_offset: int = 0x10000,
+                    mem_length: int = 0x1000) -> str:
+        """
+        CMD:DEBUG:DRAM-REPAIR (SPFT V6): apply DRAM repair parameters from a
+        dram.info param file. The DA fetches the file via CMD:DOWNLOAD-FILE and
+        reports SUCCEEDED, NO-NEED or FAILED before the closing CMD:END.
+        """
+        if param_file == "D:/dram.info":
+            param_file = os.path.join(self.pathconfig.get_payloads_path(), "dram.info")
+        if not os.path.exists(param_file):
+            self.error(f"DRAM repair param file {param_file} doesn't exist.")
+            return "FAILED"
+        xmlcmd = self.xflash.cmd.cmd_dram_repair(mem_offset=mem_offset, mem_length=mem_length,
+                                                 param_file=param_file)
+        self.info(f"Running DRAM repair using {param_file}")
+        with open(param_file, "rb") as fhandle:
+            upload_data = fhandle.read()
+        result = self._send_and_serve_file_transfers(xmlcmd, upload_data=upload_data)
+        self.info(f"DRAM repair result: {result}")
+        return result
+
+    def write_private_cert(self, cert_file: str = "cert.bin") -> str:
+        """
+        CMD:WRITE-PRIVATE-CERT (SPFT V6): send a private cert file to the DA
+        (V5 heritage: FlashTool_DownloadCert / SCERT download, Ctrl+C hotkey).
+        The DA fetches the file from its local storage (ms-appdata:///local/)
+        via CMD:DOWNLOAD-FILE before the closing CMD:END/CMD:START.
+        """
+        if not os.path.exists(cert_file):
+            self.error(f"Cert file {cert_file} doesn't exist.")
+            return "FAILED"
+        xmlcmd = self.xflash.cmd.cmd_write_private_cert(cert_file=cert_file)
+        self.info(f"Writing private cert from {cert_file}")
+        with open(cert_file, "rb") as fhandle:
+            upload_data = fhandle.read()
+        result = self._send_and_serve_file_transfers(xmlcmd, upload_data=upload_data)
+        self.info(f"Write private cert result: {result}")
+        return result
+
     def readfuses(self):
         if self.mtk.config.chipconfig.efuse_addr is not None:
             base = self.mtk.config.chipconfig.efuse_addr

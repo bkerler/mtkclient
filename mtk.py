@@ -316,6 +316,30 @@ def main():
     da_unlock.add_argument('--critical', action="store_true", default=False,
                            help="Retain legacy V4 behavior by updating the dm-verity state")
 
+    da_ramtest = da_subs.add_parser("ramtest", parents=[base], help="RAM/DRAM test (xml DA)")
+    da_ramtest.add_argument('function', type=str, nargs="?", default="FLIP",
+                            help="Test function (FLIP or CALIBRATION)")
+    da_ramtest.add_argument('--addr', type=str, default="0x4000000",
+                            help="Start address (hex), default DRAM base")
+    da_ramtest.add_argument('--length', type=str, default="0x100000", help="Length (hex)")
+    da_ramtest.add_argument('--repeat', type=str, default="0xA", help="Repeat count (hex)")
+
+    da_dramrepair = da_subs.add_parser("dram-repair", parents=[base],
+                                       help="DRAM repair using param file (xml DA)")
+    da_dramrepair.add_argument('--file', type=str, default="D:/dram.info",
+                               help="DRAM repair param file (dram.info)")
+    da_dramrepair.add_argument('--offset', type=str, default="0x10000", help="Memory offset (hex)")
+    da_dramrepair.add_argument('--length', type=str, default="0x1000", help="Memory length (hex)")
+
+    da_cert = da_subs.add_parser("cert", parents=[base], help="Private cert tools (xml DA)")
+    da_cert_subs = da_cert.add_subparsers(dest="cert_subcmd", required=True,
+                                          metavar="cert_command")
+    da_cert_dl = da_cert_subs.add_parser("download", parents=[base],
+                                         help="Send a private cert file to the DA "
+                                              "(SPFT V6 CMD:WRITE-PRIVATE-CERT)")
+    da_cert_dl.add_argument('filename', type=str,
+                            help="Cert file to write to the device")
+
     # Minimal commands
     subparsers.add_parser("devices", help=CMDS_HELP["devices"])\
         .add_argument("--filter", help="Optional Filter string")

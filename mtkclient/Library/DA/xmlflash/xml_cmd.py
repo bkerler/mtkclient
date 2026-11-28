@@ -1,4 +1,6 @@
 import datetime
+import os
+
 from mtkclient.Library.gui_utils import LogBase
 
 
@@ -152,7 +154,7 @@ class XMLCmd(metaclass=LogBase):
         return cmd
 
     def cmd_ram_test(self, function: str = "FLIP", start_address: int = 0x4000000, length: int = 0x100000,
-                     repeat: int = 0xA):
+                     repeat: int = 0xA, host_mem_offset: int = 0x8000000, host_mem_length: int = 0x100000):
         if function == "FLIP":
             content = {
                 "arg": [
@@ -163,10 +165,13 @@ class XMLCmd(metaclass=LogBase):
                 ]
             }
         else:
+            # CalibrationRAMTestCmdXML (SPFT V6 flash.dll): CALIBRATION hands the
+            # DA a host memory range for the calibration result (MEM://0x8000000:
+            # 0x100000 in the C++ sample), not a DA-local ms-appdata file.
             content = {
                 "arg": [
                     "<function>CALIBRATION</function>",
-                    "<target_file>ms-appdata:///local/calib.bin</target_file>"
+                    f"<target_file>MEM://{hex(host_mem_offset)}:{hex(host_mem_length)}</target_file>"
                 ]
             }
         cmd = self.create_cmd("RAM-TEST", content)
@@ -183,14 +188,17 @@ class XMLCmd(metaclass=LogBase):
         """
         return cmd
 
-    def cmd_dram_repair(self, mem_offset: int = 0x10000, mem_length: int = 0x1000):
+    def cmd_dram_repair(self, mem_offset: int = 0x10000, mem_length: int = 0x1000,
+                        param_file: str = "D:/dram.info"):
         content = {
             "arg": [
-                "<param_file>D:/dram.info</param_file>",
-                f"<target_file>MEM://{mem_offset}:{mem_length}</target_file>"
+                f"<param_file>{param_file}</param_file>",
+                # SPFT MEM:// URIs use hex (MEM://0x10000:0x1000)
+                f"<target_file>MEM://{hex(mem_offset)}:{hex(mem_length)}</target_file>"
             ]
         }
-        cmd = self.create_cmd("DRAM-REPAIR", content)
+        # SPFT V6 flash.dll sends the debug-prefixed command: CMD:DEBUG:DRAM-REPAIR
+        cmd = self.create_cmd("DEBUG:DRAM-REPAIR", content)
         # INFO Result: SUCCEEDED, NO-NEED, FAILED
         return cmd
 
@@ -548,10 +556,13 @@ class XMLCmd(metaclass=LogBase):
         cmd = self.create_cmd("SET-RSC", content)
         return cmd
 
-    def cmd_write_private_cert(self):
+    def cmd_write_private_cert(self, cert_file: str = "cert.bin"):
+        # SPFT V6 console_mode.xsd WRITE-PRIVATE-CERT: the host uploads the
+        # cert file into the DA local storage (ms-appdata:///local/), the DA
+        # then fetches it via DOWNLOAD-FILE (same flow as cmd_write_efuse).
         content = {
             "arg": [
-                "<source_file>ms-appdata:///local/cert.bin</source_file>"
+                f"<source_file>ms-appdata:///local/{os.path.basename(cert_file)}</source_file>"
             ]
         }
         cmd = self.create_cmd("WRITE-PRIVATE-CERT", content)

@@ -101,6 +101,7 @@ class DAXML(metaclass=LogBase):
         self.rdword = self.mtk.port.rdword
         self.rword = self.mtk.port.rword
         self.daconfig = daconfig
+        self.chksum_rule = None  # optional ChksumRule (Library.chksum), see verify_image_chksum
         self.partition = Partition(self.mtk, self.readflash, self.read_partition_table, loglevel)
         self.pathconfig = PathConfig()
         self.generatekeys = self.mtk.config.generatekeys
@@ -448,13 +449,16 @@ class DAXML(metaclass=LogBase):
                 return cmd, message
         return cmd, result
 
-    def upload(self, result: DwnFile, data, display=True, raw=False):
+    def upload(self, result: DwnFile, data, display=True, raw=False, drain_end=True):
         if type(result) is DwnFile:
             # checksum = result.checksum
             # info = result.info
             source_file = result.source_file
             packet_length = result.packet_length
-            if ":" in source_file:
+            # Only a MEM://addr:len URI carries the transfer length inside the
+            # URI; ms-appdata:///local/... names and plain paths don't, the
+            # length is the data itself.
+            if source_file and source_file.startswith("MEM://"):
                 tmp = source_file.split(":")[2]
                 length = int(tmp[2:], 16)
             else:
@@ -486,6 +490,13 @@ class DAXML(metaclass=LogBase):
                     bytestowrite -= packet_length
                 if raw:
                     self.ack()
+                if not drain_end:
+                    # The caller owns the CMD:END/CMD:START drain (e.g. the
+                    # file-transfer serving loop, which may still receive a
+                    # CMD:UPLOAD-FILE verdict before the CMD:END).
+                    if display:
+                        pg.done()
+                    return True
                 cmd, result = self.get_command_result()
                 self.ack()
                 if display:
@@ -948,6 +959,27 @@ class DAXML(metaclass=LogBase):
             self.error("Read flash isn't supported")
             sys.exit(1)
 
+    def set_chksum_rule(self, rule) -> None:
+        """
+        Install a ChksumRule (Library.chksum) used by the write path to verify
+        load images before upload (SPFT V6 imageChksumVerify). None disables
+        the verification.
+        """
+        self.chksum_rule = rule
+
+    def verify_image_chksum(self, filename: str, data) -> bool:
+        """
+        SPFT V6 write-path checksum hook (ConsoleMode::ConsoleModeRunner::
+        imageChksumVerify, "Begin verify load images checksum"). Verifies the
+        raw image bytes against the installed ChksumRule; images without a
+        rule entry are skipped ("skip chksum for rom(%s)."). Returns False on
+        checksum mismatch ("image checksum mismatch").
+        """
+        rule = getattr(self, "chksum_rule", None)
+        if rule is None or not filename:
+            return True
+        return rule.verify_image(os.path.basename(filename), data)
+
     def writeflash(self, addr, length, filename, offset=0, parttype=None, wdata=None, display=True):
         fh = None
         if filename != "":
@@ -979,6 +1011,14 @@ class DAXML(metaclass=LogBase):
                     data = fh.read(length)
                 else:
                     data = wdata
+                # SPFT V6 imageChksumVerify: verify the load image checksum
+                # before anything leaves the host (FT_FLASHTOOL_ERROR_CHKSUM_FAIL)
+                if not self.verify_image_chksum(filename, data):
+                    self.error("Image checksum verification failed, aborting "
+                               f"flash write at 0x{addr:08X}.")
+                    if fh:
+                        fh.close()
+                    return False
                 if len(data) % 512 != 0:
                     fill = 512 - (len(data) % 512)
                     data += fill*b"\x00"
