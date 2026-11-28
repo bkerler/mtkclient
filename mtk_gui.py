@@ -28,6 +28,7 @@ from mtkclient.gui.toolkit import asyncThread, trap_exc_during_debug, convert_si
 from mtkclient.config.payloads import PathConfig
 from mtkclient.gui.main_gui import Ui_MainWindow
 from mtkclient.gui.themes import DARK_THEME, LIGHT_THEME
+from mtkclient.i18n import activate as activate_i18n, get_lang, t
 import os
 import serial.tools.list_ports
 
@@ -51,7 +52,7 @@ MtkTool = Main(variables)
 class SerialPortDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Select Serial Port")
+        self.setWindowTitle(t("Select Serial Port"))
         self.resize(400, 300)
 
         self.selected_port = ""
@@ -70,7 +71,7 @@ class SerialPortDialog(QDialog):
         # Buttons
         button_layout = QHBoxLayout()
 
-        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button = QPushButton(t("Refresh"))
         self.refresh_button.clicked.connect(self.refresh_ports)
         button_layout.addWidget(self.refresh_button)
 
@@ -78,7 +79,7 @@ class SerialPortDialog(QDialog):
 
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.accept)
-        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button = QPushButton(t("Cancel"))
         self.cancel_button.clicked.connect(self.reject)
 
         button_layout.addWidget(self.ok_button)
@@ -95,7 +96,7 @@ class SerialPortDialog(QDialog):
         ports = serial.tools.list_ports.comports()
 
         if not ports:
-            item = QListWidgetItem("No serial ports found")
+            item = QListWidgetItem(t("No serial ports found"))
             item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make it unselectable
             self.port_list.addItem(item)
             self.ok_button.setEnabled(False)
@@ -184,7 +185,7 @@ def getDevInfo(thread, parameters):
             with lock:
                 phone_info['cdcInit'] = True
     except Exception as e:
-        print(f"Connection exception: {e}")  # Add for debugging; replace with thread.sendToLogSignal if available
+        print(t("Connection exception: {e}").format(e=e))  # Add for debugging; replace with thread.sendToLogSignal if available
         with lock:
             phone_info['cantConnect'] = True
     with lock:
@@ -201,11 +202,11 @@ def getDevInfo(thread, parameters):
             phone_info['chipset'] = (str(mtk_class.config.chipconfig.name) +
                                      " (" + str(mtk_class.config.chipconfig.description) + ")")
             if mtk_class.config.is_brom:
-                phone_info['bootMode'] = "Bootrom mode"
+                phone_info['bootMode'] = t("Bootrom mode")
             elif mtk_class.config.chipconfig.damode:
-                phone_info['bootMode'] = "DA mode"
+                phone_info['bootMode'] = t("DA mode")
             else:
-                phone_info['bootMode'] = "Preloader mode"
+                phone_info['bootMode'] = t("Preloader mode")
         thread.sendUpdateSignal.emit(phone_info.copy())
     else:
         with lock:
@@ -214,8 +215,13 @@ def getDevInfo(thread, parameters):
 
 
 def load_translations(application):
-    # Load application translations and the QT base translations for the current locale
+    # Load application translations and the QT base translations for the current locale.
+    # Honor the i18n layer (MTK_LANG) so the GUI language can be chosen without
+    # changing the system locale; the default ("en") keeps upstream behavior.
     locale = QLocale.system()
+    lang = get_lang()
+    if lang and lang != "en":
+        locale = QLocale(lang)
     translator = QTranslator(application)
     directory = os.path.dirname(__file__)
     lang = f'mtkclient/gui/i18n/{locale.name()}'
@@ -252,8 +258,8 @@ class MainWindow(QMainWindow):
         self.ui.menuFile.setEnabled(False)
         self.ui.tabWidget.setHidden(True)
         # View menu — always accessible, not gated by device connection
-        self.menuView = self.ui.menubar.addMenu("View")
-        self.dark_mode_action = QAction("Dark Mode", self, checkable=True)
+        self.menuView = self.ui.menubar.addMenu(t("View"))
+        self.dark_mode_action = QAction(t("Dark Mode"), self, checkable=True)
         self.dark_mode_action.setChecked(is_dark)
         self.dark_mode_action.triggered.connect(self.toggle_dark_mode)
         self.menuView.addAction(self.dark_mode_action)
@@ -323,7 +329,7 @@ class MainWindow(QMainWindow):
                 full_percentage_done = int((done_bytes / total_bytes) * 100)
                 self.ui.fullProgress.setValue(full_percentage_done)
                 timeinfototal = self.timeEstTotal.update(full_percentage_done, 100)
-                self.ui.fullProgressText.setText(f"<table width='100%'><tr><td><b>Total:</b> " +
+                self.ui.fullProgressText.setText(f"<table width='100%'><tr><td>{t('<b>Total:</b>')} " +
                                                  f"{convert_size(done_bytes)} / {convert_size(total_bytes)}" +
                                                  f"</td><td align='right'>{timeinfototal}" +
                                                  f"{QCoreApplication.translate('main', ' left')}" +
@@ -334,7 +340,7 @@ class MainWindow(QMainWindow):
                 full_percentage_done = int((done_bytes / part_bytes) * 100)
                 self.ui.fullProgress.setValue(full_percentage_done)
                 timeinfototal = self.timeEstTotal.update(full_percentage_done, 100)
-                self.ui.fullProgressText.setText("<table width='100%'><tr><td><b>Total:</b> " +
+                self.ui.fullProgressText.setText("<table width='100%'><tr><td>" + t("<b>Total:</b>") + " " +
                                                  convert_size(done_bytes) + " / " + convert_size(part_bytes) +
                                                  "</td><td align='right'>" +
                                                  timeinfototal + QCoreApplication.translate("main",
@@ -345,7 +351,7 @@ class MainWindow(QMainWindow):
                 part_done = (curpart_bytes / part_bytes) * 100
                 self.ui.partProgress.setValue(part_done)
                 timeinfo = self.timeEst.update(curpart_bytes, part_bytes)
-                txt = ("<table width='100%'><tr><td><b>Current partition:</b> " + self.Status["currentPartition"] +
+                txt = ("<table width='100%'><tr><td>" + t("<b>Current partition:</b>") + " " + self.Status["currentPartition"] +
                        " (" + convert_size(curpart_bytes) + " / " + convert_size(part_bytes) +
                        ") </td><td align='right'>" +
                        timeinfo + QCoreApplication.translate("main", " left") + "</td></tr></table>")
@@ -355,7 +361,7 @@ class MainWindow(QMainWindow):
         while not self.Status["done"]:
             # print(self.dumpStatus)
             time.sleep(0.1)
-        print("DONE")
+        print(t("DONE"))
         self.ui.readpreloaderbtn.setEnabled(True)
         self.ui.readpartitionsbtn.setEnabled(True)
         self.ui.readboot2btn.setEnabled(True)
@@ -379,7 +385,7 @@ class MainWindow(QMainWindow):
             self.Status["currentPartitionSizeDone"] = progress
             self.updateState()
         except Exception as e:
-            print(f"Progress update error: {e}")
+            print(t("Progress update error: {e}").format(e=e))
 
     def setdevhandler(self, devhandler):
         self.devhandler = devhandler
@@ -482,7 +488,7 @@ class MainWindow(QMainWindow):
         self.ui.partProgress.setValue(100)
         self.ui.fullProgress.setValue(100)
         self.ui.fullProgressText.setText("")
-        self.ui.partProgressText.setText(self.tr("Done."))
+        self.ui.partProgressText.setText(self.tr(t("Done.")))
         self.Status = {}
 
     def getpartitions(self):
@@ -581,7 +587,7 @@ class MainWindow(QMainWindow):
                     QCoreApplication.translate("main", "Phone detected:\nReading model info..."))
             else:
                 self.ui.phoneInfoTextbox.setText(QCoreApplication.translate("main",
-                                                                            "Phone detected:\n" + phone_info[
+                                                                            t("Phone detected:\n") + phone_info[
                                                                                 'chipset'] + "\n" + phone_info[
                                                                                 'bootMode']))
             if phone_info['daInit']:
@@ -654,6 +660,9 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    # Activate the i18n layer from MTK_LANG before any widget is built (default: en).
+    activate_i18n()
+
     # Enable nice 4K Scaling
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
